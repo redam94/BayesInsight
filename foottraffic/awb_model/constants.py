@@ -1,4 +1,10 @@
 """File contains constants used throughout the project"""
+from foottraffic.awb_model.transforms import (
+    log, linear, exp,
+    indexp, power, 
+    s_origin, s_shaped
+)
+from foottraffic.awb_model.types.transform_types import FunctionalForms
 
 MFFCOLUMNS = [
     "Period",
@@ -10,3 +16,13 @@ MFFCOLUMNS = [
     "VariableValue",
     "VariableName"
 ]
+
+TRANSFOMR_MAP = {
+    FunctionalForms.exp: exp,
+    FunctionalForms.linear: linear,
+    FunctionalForms.log: log,
+    FunctionalForms.indexp: indexp,
+    FunctionalForms.power: power,
+    FunctionalForms.sshape: s_shaped,
+    FunctionalForms.sorigin: s_origin
+}
