@@ -17,7 +17,7 @@ MFFCOLUMNS = [
     "VariableName"
 ]
 
-TRANSFOMR_MAP = {
+TRANSFOMER_MAP = {
     FunctionalForms.exp: exp,
     FunctionalForms.linear: linear,
     FunctionalForms.log: log,

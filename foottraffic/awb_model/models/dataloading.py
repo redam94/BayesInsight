@@ -24,6 +24,12 @@ class MetaData(BaseModel):
     row_ids: Tuple[INDEXCOL, ...] = Field(default = ("Period",), min_length=1, max_length=6)
 
     
+    @field_validator('row_ids')
+    @classmethod
+    def row_ids_validator(cls, v):
+        if not "Period" in v:
+            return list(v) + ["Period"]
+        return (col for col in MFFCOLUMNS if col in v)
     
     def check_values_contained(self, other_set: Set[str], col: str) -> bool:
         try:
@@ -49,12 +55,12 @@ class MFF(BaseModel):
     data: List[MFF_ROW] = Field(repr=False)
     #periodicity: Literal["Weekly", "Daily"] = "Weekly"
     #row_ids: Tuple[INDEXCOL, ...] = Field(default = ("Geography", "Period"), max_length=6, min_length=1)
-    metadata: Optional[MetaData] = Field(default = None, repr=False)
+    metadata: Optional[MetaData] = Field(default=None, repr=False)
 
     @classmethod
     def from_mff_df(cls, df: pd.DataFrame, metadata: Optional[MetaData]=None)->'MFF':
         data = df.to_dict('records')
-        return cls(data=data, metadata=None)
+        return cls(data=data, metadata=metadata)
     
     def initialize_metadata(self) -> MetaData:
         if not self.metadata is None:
@@ -88,7 +94,13 @@ class MFF(BaseModel):
         
         return v
     
-    @model_validator(mode='after')
+    @model_validator(mode="after")
+    def validate_model(self):
+        model = self.check_date_alignment()
+        model = model.check_metadata()
+        model = model.check_necessary_variables()
+        return model
+    
     def check_date_alignment(self):
         if self.metadata is None:
             self.initialize_metadata()
@@ -99,7 +111,19 @@ class MFF(BaseModel):
                 raise ValueError("Weekly data must be aligned to the same date")
         return self
     
-    @model_validator(mode='after')
+    
+    def get_summary_stats(self) -> pd.DataFrame:
+        af = self.analytic_dataframe()
+        cols = [col for col in af.columns if not col in self.metadata.row_ids]
+        def number_missing(series):
+            return series.isna().sum()
+        def quantile(p):
+            def q(x):
+                return np.quantile(x, p)
+            q.__name__ = f"{p:.0%}" if p!=.5 else "Median"
+            return q
+        return af.groupby([c for c in self.metadata.row_ids if not c == "Period"])[cols].agg(["sum", "mean", "std", number_missing, 'min', quantile(.25), quantile(.5), quantile(.75), 'max'])
+    
     def check_necessary_variables(self):
         if self.metadata is None:
             self.initialize_metadata()
@@ -112,7 +136,7 @@ class MFF(BaseModel):
             raise ValueError(f"{self.metadata.necessary_variables} must exist in the mff")
         return self
     
-    @model_validator(mode='after')
+    
     def check_metadata(self):
         if self.metadata is None:
             self.initialize_metadata()
@@ -170,6 +194,9 @@ class MFF(BaseModel):
             metadata = json.load(f)
         return cls.load_from_file(folder/'data.csv', **metadata)
     
+    def set_index_rows(self, row_ids: Tuple[INDEXCOL, ...]) -> None:
+        self.metadata.row_ids = row_ids
+    
     @classmethod
     def load_from_file(cls, file: Union[str, Path], metadata: Optional[MetaData]=None, **kwargs) -> 'MFF':
         """Loads MFF from csv file"""
@@ -186,7 +213,7 @@ class MFF(BaseModel):
         """Returns raw dataframe"""
         return pd.DataFrame(self.data)
     
-    def analytic_dataframe(self, row_id: Optional[Union[List[str], str]]=None, aggfunc: Union[str, Callable[[pd.Series], float]]='sum') -> pd.DataFrame:
+    def analytic_dataframe(self, row_id: Optional[Union[List[str], str]]=None, aggfunc: Union[str, Callable[[pd.Series], float]]='sum', indexed=False) -> pd.DataFrame:
         """Returns Analytical Dataframe as a pandas dataframe object"""
         if isinstance(row_id, str):
             row_id = [row_id]
@@ -198,9 +225,12 @@ class MFF(BaseModel):
         df = pd.DataFrame(self.data)[MFFCOLUMNS]
         df["Period"] = pd.to_datetime(df["Period"])
         columns = [col for col in MFFCOLUMNS if not col in row_id+["VariableValue", "VariableName"]]
-        df = df.pivot_table(index=row_id, columns=["VariableName"]+columns, values="VariableValue", aggfunc=aggfunc)
+        df = df.pivot_table(index=[col for col in MFFCOLUMNS if col in row_id and not col == "Period"]+["Period"], columns=["VariableName"]+columns, values="VariableValue", aggfunc=aggfunc)
         df.columns = ["_".join(col) for col in df.columns]
+        if indexed:
+            return df
         return df.reset_index()
+    
     
     def get_unique_varnames(self) -> list:
         """Returns list of all variablenames in model"""
@@ -213,7 +243,7 @@ class MFF(BaseModel):
     
     @computed_field
     @property
-    def _info(self) -> str:
+    def _info(self) -> Dict:
         df = pd.DataFrame(self.data)
         df["Period"] = pd.to_datetime(df["Period"])
         unique_attr = {}
@@ -222,7 +252,7 @@ class MFF(BaseModel):
                 continue
             unique_attr[col] = {"# Unique": df[col].nunique(), "Value Counts": df[col].value_counts().to_dict()}
         unique_attr["Period"] = {
-            "Periodicity": self.periodicity,
+            "Periodicity": self.metadata.periodicity,
             "Date Range": (df["Period"].min().strftime("%Y-%m-%d"), df["Period"].max().strftime("%Y-%m-%d")),
             "# Unique": df['Period'].nunique(),
         }
@@ -230,7 +260,7 @@ class MFF(BaseModel):
             self.initialize_metadata()
         if self.metadata.periodicity == 'Weekly':
             unique_attr["Period"] = unique_attr["Period"] | {"Aligned": df["Period"].dt.day_name().unique()[0]}
-        return json.dumps(unique_attr)
+        return unique_attr
     
     
     def print_info(self) -> None:
