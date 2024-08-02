@@ -3,9 +3,10 @@ from enum import StrEnum
 INDEXED_TRANSFORMS = []
 
 class Normilization(StrEnum):
-    around1 = 'around1'
-    around0 = 'around0'
-    standardize = 'standardize'
+    # Grouped Normilization Not Implemented
+    # around1 = 'around1'
+    # around0 = 'around0'
+    global_standardize = 'Global Standardize'
     none = 'none'
 
 class FunctionalForms(StrEnum):
@@ -16,6 +17,8 @@ class FunctionalForms(StrEnum):
     exp = 'exp'
     power = 'power'
     indexp =  'indexp'
+
+class TimeTransforms(StrEnum):
     movingAverage = 'movingAverage'
 
 class Adstock(StrEnum):

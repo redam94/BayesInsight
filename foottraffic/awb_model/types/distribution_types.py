@@ -21,6 +21,7 @@ class PosContUniDist(StrEnum):
     halfcauchy = "HalfCauchy"
     beta = "Beta"
     exponential = 'Exponetial'
+    lognormal = "LogNormal"
 
 class PosContMultDist(StrEnum):
     dirichlet = "Dirichlet"

@@ -14,7 +14,7 @@ class ConvMode(StrEnum):
     Before = "Before"
     Overlap = "Overlap"
 
-class WeibullType(str, Enum):
+class WeibullType(StrEnum):
     # TODO: use StrEnum when we upgrade to python 3.11
     PDF = "PDF"
     CDF = "CDF"
