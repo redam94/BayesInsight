@@ -1,0 +1,17 @@
+name: foottraffic_2
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - pymc
+  - pydantic
+  - ca-certificates
+  - openssl
+  - pip
+  - pip:
+    - tueplots
+    - jax
+    - numpyro
+

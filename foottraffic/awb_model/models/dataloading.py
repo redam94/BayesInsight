@@ -195,7 +195,11 @@ class MFF(BaseModel):
         return cls.load_from_file(folder/'data.csv', metadata=metadata['metadata'])
     
     def set_index_rows(self, row_ids: Tuple[INDEXCOL, ...]) -> None:
-        self.metadata.row_ids = row_ids
+        meta_data = self.metadata.model_dump()
+        meta_data['row_ids'] = row_ids
+        updated_metadata = MetaData(**meta_data)
+        self.metadata = updated_metadata
+        
     
     @classmethod
     def load_from_file(cls, file: Union[str, Path], metadata: Optional[MetaData]=None, **kwargs) -> 'MFF':

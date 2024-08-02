@@ -20,13 +20,17 @@ class ControlCoeffPrior(BaseModel):
     }
 
 class HillPrior(BaseModel):
+    type: Literal['Hill'] = "Hill"
     K_ave: PositiveFloat = .85
     K_std: PositiveFloat = .6
     n_ave: PositiveFloat = 1.5
     n_std: PositiveFloat = 1.2
+
+
     
 
 class SShapedPrior(BaseModel):
+    type: Literal['SShaped'] = "SShaped"
     alpha_ave: PositiveFloat = .96
     alpha_std: PositiveFloat = .2
     beta_ave: PositiveFloat = 1e2

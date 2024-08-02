@@ -6,6 +6,7 @@ from arviz import InferenceData
 import arviz as az
 import pymc as pm
 import numpy as np
+import pandas as pd
 
 import json
 from typing import List, Optional, Union, Annotated, Any
@@ -22,7 +23,8 @@ class FoottrafficModel(BaseModel):
     variable_details: List[Variable]
     artifact: Optional[DirectoryPath] = None 
     fitted: bool = False
-    trace: Optional[InferenceData] = None 
+    trace: Optional[InferenceData] = None
+    VOF: Optional[pd.DataFrame] =None
     
 
     def fit(self, draws=1000, tune=1000, chains=4, overwrite=False):
@@ -36,19 +38,19 @@ class FoottrafficModel(BaseModel):
         self.trace = trace
 
     def build(self):
-        meta_data = self.data.metadata
-        af = self.data.analytic_dataframe()
+    
         data = self.data
-        row_ids = meta_data.row_ids.copy()
-        coords = {
-            col: af[col].unique() for col in row_ids
-        }
-        print(coords)
+        
+        coords = self.get_coords()
+        media_variables = self.return_media_variables()
+        control_variables = self.return_control_variables()
+        
         with pm.Model(coords=coords) as model:
             x = pm.Normal('x', mu=3, tau=.1)
             pm.Normal('obs', mu=x, tau=10, observed=np.array([2, 2.1, 1.9, 1.98]))
 
         return model
+    
     def save(self, folder):
         
         if isinstance(folder, str):
@@ -82,6 +84,7 @@ class FoottrafficModel(BaseModel):
             if var.variable_type == 'control':
                 control_vars.append(var)
         return control_vars
+    
     def get_coords(self):
         meta_data = self.data.metadata
         af = self.data.analytic_dataframe()
@@ -120,3 +123,8 @@ class FoottrafficModel(BaseModel):
         
         return cls(data=data, variable_details=model_def['variable_details'])
 
+    @classmethod
+    def new_from_dataset(cls, folder, output="new_model"):
+        mff = MFF.from_bundle(folder)
+        #print(mff.metadata.necessary_variables)
+        cls(data=mff, variable_details=[ControlVariableDetails(variable_name="Placeholder Change Me"), MediaVariableDetails(variable_name="Media Placeholder Change Me")]).save(output)

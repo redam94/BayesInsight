@@ -82,7 +82,7 @@ class VariableDetails(BaseModel):
 class ControlVariableDetails(VariableDetails):
     variable_type: Literal['control'] = 'control'
     coeff_prior: ControlCoeffPrior = ControlCoeffPrior()
-    fixed_coeff_dims: Optional[list[str]] = None
+    fixed_ind_coeff_dims: Optional[list[str]] = None
     random_coeff_dims: Optional[list[str]] = None
 
     def build_coeff_prior(self, model=None):
@@ -101,7 +101,7 @@ class MediaVariableDetails(VariableDetails):
     adstock: Adstock = Adstock.delayed
     media_transform: MediaTransform = MediaTransform.hill
     coeff_prior: MediaCoeffPrior = MediaCoeffPrior()
-    fixed_coeff_dims: Optional[list[str]] = None
+    fixed_ind_coeff_dims: Optional[list[str]] = None
     random_coeff_dims: Optional[list[str]] = None
     media_transform_prior: Union[HillPrior, SShapedPrior] = HillPrior()
 
