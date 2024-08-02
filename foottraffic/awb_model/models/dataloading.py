@@ -29,7 +29,7 @@ class MetaData(BaseModel):
     def row_ids_validator(cls, v):
         if not "Period" in v:
             return list(v) + ["Period"]
-        return (col for col in MFFCOLUMNS if col in v)
+        return list(col for col in MFFCOLUMNS if ((col in v) and (col != "Period"))) + ["Period"]
     
     def check_values_contained(self, other_set: Set[str], col: str) -> bool:
         try:
@@ -192,7 +192,7 @@ class MFF(BaseModel):
         folder = Path(folder)
         with open(folder/"metadata.json", 'r') as f:
             metadata = json.load(f)
-        return cls.load_from_file(folder/'data.csv', **metadata)
+        return cls.load_from_file(folder/'data.csv', metadata=metadata['metadata'])
     
     def set_index_rows(self, row_ids: Tuple[INDEXCOL, ...]) -> None:
         self.metadata.row_ids = row_ids
