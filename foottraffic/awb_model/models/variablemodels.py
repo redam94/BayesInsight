@@ -10,14 +10,14 @@ from pydantic import BaseModel, PositiveFloat, model_validator
 import numpy as np
 import pandas as pd
 import pymc as pm
+import pytensor.tensor as pt
 
-INDEX_MAP = {
-    "Geography": 'i',
-    "Product": 'j',
-    "Outlet": 'k',
-    "Campaign": 'l',
-    'Creative': 'm'
-}
+def _row_ids_to_ind_map(row_ids: list[str]) -> list[int]:
+    ind_map = {
+        row_ids[i]: i for i in range(len(row_ids))
+    }
+    return ind_map
+
 class VariableDetails(BaseModel):
     variable_name: str
     variable_type: Literal["control", "exog", 'media', 'base']
@@ -85,12 +85,27 @@ class ControlVariableDetails(VariableDetails):
     fixed_ind_coeff_dims: Optional[list[str]] = None
     random_coeff_dims: Optional[list[str]] = None
 
-    def build_coeff_prior(self, model=None):
+    def build_coeff_prior(self, data:MFF, model=None):
+        index_map = _row_ids_to_ind_map(data.metadata.row_ids)
         model = pm.modelcontext(model)
+        if self.fixed_ind_coeff_dims is None:
+            fixed_dims_project = dict(
+                repeats=tuple([len(model.coords[col]) for col, index in index_map.items() if not col == 'Period']),
+
+                axis=tuple(
+                    [index for col, index in index_map.items() if not col == 'Period']
+                           )
+            )
+            print(fixed_dims_project)
+        else:
+            fixed_dims_project = dict(
+                repeats=tuple([len(model.coords[col]) for col, index in index_map.items() if not col in self.fixed_ind_coeff_dims and not col == 'Period']),
+                axis = tuple([index for col, index in index_map.items() if not col in self.fixed_ind_coeff_dims and not col == 'Period']) 
+            )
         with model:
-            coeff_fixed = getattr(pm, self.coeff_prior.coeff_dist)(f"{self.variable_name}_fixed_coeff", **self.coeff_prior.coef_params, dims=self.fixed_coeff_dims)
+            coeff_fixed = getattr(pm, self.coeff_prior.coeff_dist)(f"{self.variable_name}_fixed_coeff", **self.coeff_prior.coef_params, dims=self.fixed_ind_coeff_dims)
             if self.random_coeff_dims is None:
-                coeff_est = pm.Deterministic(f'{self.variable_name}_coeff_estimate', coeff_fixed, dims=self.fixed_coeff_dims)
+                coeff_est = pm.Deterministic(f'{self.variable_name}_coeff_estimate', pt.expand_dims(coeff_fixed, axis=fixed_dims_project['axis'])*np.ones(shape=fixed_dims_project['repeats']), dims=data.metadata.row_ids[:-1])
                 return coeff_est
             sigma = pm.HalfCauchy(f'{self.variable_name}_rand_coeff_sigma', 1)
             random_fixed = pm.Normal(f"{self.variable_name}_rand_coeff", 0, 1, dims=self.random_coeff_dims)
