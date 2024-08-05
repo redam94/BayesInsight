@@ -4,7 +4,7 @@ from foottraffic.awb_model.models.transformsmodel import DeterministicTransform,
 from foottraffic.awb_model.models.priormodel import MediaCoeffPrior, HillPrior, SShapedPrior, ControlCoeffPrior
 from foottraffic.awb_model.models.likelihood import Likelihood
 from foottraffic.awb_model.models.dataloading import MFF
-from foottraffic.awb_model.constants import MFFCOLUMNS
+from foottraffic.awb_model.constants import MFFCOLUMNS, TRANSFOMER_MAP
 
 from typing import Optional, Union, Literal
 
@@ -281,13 +281,95 @@ class MediaVariableDetails(VariableDetails):
         return self
     
     def build_coeff_prior(self, model=None):
-        priors = super().build_coeff_prior(model)
-        self.enforce_sign()
+        model = pm.modelcontext(model)
+        with model:
+            priors = super().build_coeff_prior()
+            self.enforce_sign()
         return priors
     
-    def build_media_priors(self, model=None):
-        pass
+    def build_hill_priors(self, model=None):
+        model = pm.modelcontext(model)
+        # Half saturation prior helper terms
+        K_ave = self.media_transform_prior.K_ave
+        K_std = self.media_transform_prior.K_std
+        K_ratio = K_std/K_ave + 1
+        # Shape prior helper terms
+        n_ave = self.media_transform_prior.n_ave
+        n_std = self.media_transform_prior.n_std
+        n_ratio = n_std/n_ave + 1
+        with model:
+
+            K_ = pm.Normal(
+                f"{self.variable_name}_K_", 
+                np.log(K_ave), 
+                np.log(K_ratio))
+            n_ = pm.Normal(
+                f"{self.variable_name}_n_",
+                np.log(n_ave),
+                np.log(n_ratio)
+            )
+
+            K = pm.Deterministic(
+                f"{self.variable_name}_K",
+                pm.math.exp(K_)
+            )
+            n = pm.Deterministic(
+                f"{self.variable_name}_n",
+                pm.math.exp(n_)
+            )
+        return K, n
     
+    def build_sshaped_priors(self, model=None):
+        model = pm.modelcontext(model)
+        alpha_mu = self.media_transform_prior.alpha_ave
+        alpha_sigma = self.media_transform_prior.alpha_std
+        beta_mu = np.log(self.media_transform_prior.beta_ave)/8
+        beta_sigma = self.media_transform_prior.beta_std/10e8
+        with model:
+            alpha = pm.Beta(
+                f"{self.variable_name}_alpha", 
+                mu=alpha_mu,
+                alpha_sigma = alpha_sigma
+            )
+            beta_ = pm.Beta(
+                f"{self.variable_name}_beta_",
+                mu=beta_mu,
+                sigma=beta_sigma
+            )
+            beta = pm.Deterministic(
+                f"{self.variable_name}_beta",
+                10**(beta_*8)
+            )
+        return alpha, beta
+
+    def build_media_priors(self, model=None):
+        model = pm.modelcontext(model)
+        with model:
+            if self.media_transform == MediaTransform.hill:
+                K, n = self.build_hill_priors()
+                return K, n
+            if self.media_transform == MediaTransform.sorigin or self.media_transform == MediaTransform.sshaped:
+                alpha, beta = self.build_sshaped_priors()
+                return alpha, beta
+        
+        raise NotImplementedError(f"{self.media_transform} is not implemented yet.")
+    
+    def build_delayed_adstock_priors(self, model=None):
+        model = pm.modelcontext(model)
+        with model:
+            pass
+
+    def get_contributions(self, model=None):
+        model = pm.modelcontext(model)
+        with model:
+            estimate = self.build_coeff_prior()
+            media_priors = self.build_media_priors()
+            dims = self._var_dims()
+            transformed_variable = getattr(model, f"{self.variable_name}_transformed")
+            media_transformed = pm.Deterministic(f"{self.variable_name}_media_transform", TRANSFOMER_MAP[self.media_transform](transformed_variable, *media_priors), dims=dims)
+
+            contributions = pm.Deterministic(f"{self.variable_name}_contribution", estimate*getattr(model, f"{self.variable_name}_transformed"), dims=dims)
+        return contributions  
 
 class ExogVariableDetails(VariableDetails):
     variable_type: Literal['exog'] = 'exog'
