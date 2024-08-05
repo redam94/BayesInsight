@@ -32,7 +32,8 @@ class VariableDetails(BaseModel):
     deterministic_transform: Transform that with parameters known in advance
     normalization: Normalization applied after deterministic_transform
     time_transform: Not implemented
-
+    std: Standard deviation assigned when normalize is called for first time
+    mean: Mean assigned when normalize is called for first time
     """
 
     variable_name: str
@@ -42,6 +43,7 @@ class VariableDetails(BaseModel):
     std: Optional[float] = None
     mean: Optional[float] = None
     time_transform: Optional[TimeTransformer] = None
+    sign: Optional[Literal['positive', 'negative']] = None
     
     def normalize(self, data: Union[MFF, np.ndarray]) -> np.ndarray:
         """Apply normilazation to data"""
@@ -63,8 +65,8 @@ class VariableDetails(BaseModel):
         
         raise NotImplementedError("Only global_standardize is implemented. :(")
     
-    def transform(self, data: MFF|np.ndarray, time_first=True, normalize_first=False) -> np.ndarray:
-        """Apply transforms to """
+    def transform(self, data: Union[MFF,np.ndarray], time_first=True, normalize_first=False) -> np.ndarray:
+        """Apply deterministic transform to data"""
         
         variable = data
         if isinstance(variable, MFF):
@@ -100,7 +102,7 @@ class VariableDetails(BaseModel):
         row_dims = (data._info[index_col]["# Unique"] for index_col in data.metadata.row_ids)
         return self.get_variable_values(data).to_numpy().reshape(tuple(row_dims))
     
-    def enforce_dim_order(self, dims, drop_period = True):
+    def enforce_dim_order(self, dims: Union[list, tuple, None], drop_period: bool = True) -> list:
         if dims is None:
             return None
         ordered_dims = [dim for dim in MFFCOLUMNS if dim in dims and dim != "Period"]
@@ -108,26 +110,26 @@ class VariableDetails(BaseModel):
             return ordered_dims + ["Period"]
         return ordered_dims
     
-    def _check_coord(self, col, include_period = False):
+    def _check_coord(self, col: str, include_period:bool = False) -> bool:
         if col == 'Period':
             return include_period
         if "_" in col:
             return False
         return True
     
-    def _check_dim(self, col, dims):
+    def _check_dim(self, col: str, dims: Union[None, list, tuple]) -> bool:
         if dims is None:
             return self._check_coord(col)
         if col in dims:
             return False
         return self._check_coord(col)
     
-    def _var_dims(self, model=None):
+    def _var_dims(self, model: Optional[pm.Model]=None) -> list:
         model = pm.modelcontext(model)
         var_dims = self.enforce_dim_order(list(model.coords.keys()), drop_period=False)
         return var_dims
     
-    def build_coeff_prior(self, model=None):
+    def build_coeff_prior(self, model: Optional[pm.Model]=None):
         """Build a prior for the coefficients of the control variable
            Grabs the model on the context stack if model is None."""
         
@@ -181,16 +183,16 @@ class VariableDetails(BaseModel):
             )
             return coeff_est 
     
-    def enforce_signs(self, model=None):
+    def enforce_sign(self, model=None):
         model = pm.modelcontext(model)
         pot = lambda constraint: (pm.math.log(pm.math.switch(constraint, 1, 1e-10)))
         with model:
-            if self.enforce_sign is None:
+            if self.sign is None:
                 return model
             coeff_est = getattr(model, f"{self.variable_name}_coeff_estimate")
-            if self.enforce_sign == 'positive':
+            if self.sign == 'positive':
                 pm.Potential(f"{self.variable_name}_positive_sign", pot(coeff_est >= 0))
-            if self.enforce_sign == 'negative':
+            if self.sign == 'negative':
                 pm.Potential(f"{self.variable_name}_negative_sign", pot(coeff_est <= 0))
         return model
     
@@ -233,7 +235,7 @@ class ControlVariableDetails(VariableDetails):
     fixed_ind_coeff_dims: Optional[list[str]] = None
     random_coeff_dims: Optional[list[str]] = None
     partial_pooling_sigma: PositiveFloat = 1
-    enforce_sign: Optional[Literal['positive', 'negative']] = None
+    
 
     @model_validator(mode="after")
     def validate_effects(self):
@@ -247,7 +249,7 @@ class ControlVariableDetails(VariableDetails):
         model = pm.modelcontext(model)
         with model:
             estimate = super().build_coeff_prior()
-            self.enforce_signs()
+            self.enforce_sign()
         return estimate
     
     def get_contributions(self, model=None):
@@ -268,6 +270,7 @@ class MediaVariableDetails(VariableDetails):
     fixed_ind_coeff_dims: Optional[list[str]] = None
     random_coeff_dims: Optional[list[str]] = None
     media_transform_prior: Union[HillPrior, SShapedPrior] = HillPrior()
+    sign: Literal['positive'] = 'positive'
 
     @model_validator(mode="after")
     def validate_transform_and_prior(self):
@@ -278,7 +281,14 @@ class MediaVariableDetails(VariableDetails):
         return self
     
     def build_coeff_prior(self, model=None):
-        return super().build_coeff_prior(model)
+        priors = super().build_coeff_prior(model)
+        self.enforce_sign()
+        return priors
+    
+    def build_media_priors(self, model=None):
+        pass
+    
+
 class ExogVariableDetails(VariableDetails):
     variable_type: Literal['exog'] = 'exog'
     intercept: bool = True

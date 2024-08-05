@@ -102,13 +102,16 @@ A model folder should be formatted as follows.
       /* 
       Use fixed ind coeff if you want to learn a seperate coefficient without pooling.
       Use random coeff dims if you want to learn seperate coefficients with pooling
-      Leaving both null or not defined will cause only one co
+      Leaving both null or not defined will default to a single coefficient
       */
       "fixed_ind_coeff_dims": null,
       "random_coeff_dims": null
     },
     {
       "variable_name": "Media Placeholder Change Me",
+      /*
+      Media variables have a few differences from control variables 
+      */
       "variable_type": "media",
       "deterministic_transform": {
         "functional_form": "linear",
