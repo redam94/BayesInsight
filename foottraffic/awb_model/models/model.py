@@ -107,8 +107,10 @@ class FoottrafficModel(BaseModel):
 
     def check_media_transform_prior(self, varname):
         pass
-        
+    
+    
 
+    
     @classmethod
     def load(cls, folder):
         if isinstance(folder, str):
