@@ -1,6 +1,8 @@
 __pycache__
 *.csv
 *.json
+*.nc
+.DS_Store
 !complex_model/data/*.csv
 !complex_model/data/*.json
 !complex_model/*.json
