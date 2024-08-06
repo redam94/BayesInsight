@@ -1,4 +1,5 @@
 __pycache__
 *.csv
 *.json
-!complex_model/** */
+!complex_model/data/*.csv
+!complex_model/data/*.json
