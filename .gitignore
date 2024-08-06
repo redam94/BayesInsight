@@ -3,3 +3,4 @@ __pycache__
 *.json
 !complex_model/data/*.csv
 !complex_model/data/*.json
+!complex_model/*.json
