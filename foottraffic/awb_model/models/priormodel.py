@@ -1,87 +1,89 @@
 from foottraffic.awb_model.types.distribution_types import PosDist, Distribution, ContDist
+from foottraffic.awb_model.utils import row_ids_to_ind_map, var_dims, enforce_dim_order, check_coord, check_dim
 
 from pydantic import BaseModel, PositiveFloat
 import numpy as np
 import pymc as pm
+import pytensor.tensor as pt
 
-from typing import Dict, Literal
+from typing import Dict, Literal, Optional
 
 class Prior(BaseModel):
-    def build(self, varname, model=None):
+    def build(self, varname, model=None, **kwargs):
         raise NotImplementedError
     
-def _row_ids_to_ind_map(row_ids: list[str]) -> list[int]:
-    ind_map = {
-        row_ids[i]: i for i in range(len(row_ids))
-    }
-    return ind_map
+
 
 class CoeffPrior(Prior):
-    def buid(self, varname, random_dims=None, fixed_dims=None, model=None):
+
+    coeff_dist: Distribution
+    coeff_params: Dict[str, float]
+
+    def build(self, varname, random_dims=None, fixed_dims=None, pooling_sigma=1, model=None):
         """Build a prior for the coefficients of the control variable
            Grabs the model on the context stack if model is None."""
         
         model = pm.modelcontext(model)
 
-        index_map = _row_ids_to_ind_map(self.enforce_dim_order(list(model.coords.keys())))
+        index_map = row_ids_to_ind_map(enforce_dim_order(list(model.coords.keys())))
         
-        model_dims = {col: len(model.coords[col]) for col in index_map.keys() if self._check_dim(col, None)}
+        model_dims = {col: len(model.coords[col]) for col in index_map.keys() if check_dim(col, None)}
 
-        fixed_ind_coeff_dims = self.enforce_dim_order(fixed_dims)
+        fixed_ind_coeff_dims = enforce_dim_order(fixed_dims)
         fixed_dims_project = dict(
-            repeats=tuple([model_dims[col] for col, index in index_map.items() if self._check_dim(col, None)]),
-            axis=tuple([index for col, index in index_map.items() if self._check_dim(col, fixed_ind_coeff_dims)])
+            repeats=tuple([model_dims[col] for col, index in index_map.items() if check_dim(col, None)]),
+            axis=tuple([index for col, index in index_map.items() if check_dim(col, fixed_ind_coeff_dims)])
         )
         
-        random_coeff_dims = self.enforce_dim_order(self.random_coeff_dims)
+        random_coeff_dims = enforce_dim_order(random_dims)
         random_dims_project = dict(
-            repeats=tuple([model_dims[col] for col, index in index_map.items() if self._check_dim(col, None)]),
-            axis=tuple([index for col, index in index_map.items() if self._check_dim(col, random_coeff_dims)])
+            repeats=tuple([model_dims[col] for col, index in index_map.items() if check_dim(col, None)]),
+            axis=tuple([index for col, index in index_map.items() if check_dim(col, random_coeff_dims)])
         )
 
         with model:
-            coeff_dist = getattr(pm, self.coeff_prior.coeff_dist) # Get coeff distribution
-            coeff_params = self.coeff_prior.coef_params # Get coeff dist params
+            coeff_dist = getattr(pm, self.coeff_dist) # Get coeff distribution
+            coeff_params = self.coeff_params # Get coeff dist params
             ## Fixed Coefficients
-            coeff_fixed = coeff_dist(f"{self.variable_name}_fixed_coeff", **coeff_params, dims=fixed_ind_coeff_dims)
+            coeff_fixed = coeff_dist(f"{varname}_fixed_coeff", **coeff_params, dims=fixed_ind_coeff_dims)
             
             # Enforce Shape
             expanded_fixed = pt.expand_dims(coeff_fixed, axis=fixed_dims_project['axis'])
             repeats_fixed = np.ones(shape=fixed_dims_project['repeats'])
-            if self.random_coeff_dims is None: 
+            if random_dims is None: 
                 
                 coeff_est = pm.Deterministic(
-                    f'{self.variable_name}_coeff_estimate',
+                    f'{varname}_coeff_estimate',
                     expanded_fixed*repeats_fixed, 
                     dims=tuple(model_dims.keys())
                     )
             
                 return coeff_est
             
-            sigma = pm.HalfCauchy(f'{self.variable_name}_rand_coeff_sigma', self.partial_pooling_sigma)
+            sigma = pm.HalfCauchy(f'{varname}_rand_coeff_sigma', pooling_sigma)
             #random_coeff_mu = coeff_dist(f"{self.variable_name}_random_coeff_mu", **coeff_params)
-            random_fixed = pm.Normal(f"{self.variable_name}_rand_coeff", 0, 1, dims=self.random_coeff_dims)
+            random_fixed = pm.Normal(f"{varname}_rand_coeff", 0, 1, dims=random_coeff_dims)
 
             expanded_random = pt.expand_dims(random_fixed, axis=random_dims_project['axis'])
             repeats_random = np.ones(shape=random_dims_project['repeats'])
             coeff_est = pm.Deterministic(
-                f'{self.variable_name}_coeff_estimate',
+                f'{varname}_coeff_estimate',
                 expanded_fixed*repeats_fixed + (expanded_random*repeats_random*sigma), 
                 dims=tuple(model_dims.keys())
             )
-            return coeff_est
-class MediaCoeffPrior(Prior):
+        return coeff_est
+
+class MediaCoeffPrior(CoeffPrior):
     coeff_dist: PosDist = PosDist.lognormal
     coeff_params: Dict[str, float] = {
         'mu': np.log(.05),
         'sigma': np.log(1.3)
     }
 
-    def build():
-        pass
-class ControlCoeffPrior(Prior):
+
+class ControlCoeffPrior(CoeffPrior):
     coeff_dist: Distribution = Distribution.normal
-    coef_params: Dict[str, float] = {
+    coeff_params: Dict[str, float] = {
         'mu': 0,
         'sigma': 3
     }
@@ -99,10 +101,10 @@ class DelayedAdStockPrior(Prior):
 
 class HillPrior(Prior):
     type: Literal['Hill'] = "Hill"
-    K_ave: PositiveFloat = .85
-    K_std: PositiveFloat = .6
-    n_ave: PositiveFloat = 1.5
-    n_std: PositiveFloat = 1.2
+    K_ave: Optional[PositiveFloat] = .85
+    K_std: Optional[PositiveFloat] = .6
+    n_ave: Optional[PositiveFloat] = 1.5
+    n_std: Optional[PositiveFloat] = 1.2
 
     def build(self, var_name, model=None):
         model = pm.modelcontext(model)
@@ -138,22 +140,22 @@ class HillPrior(Prior):
 
 class SShapedPrior(Prior):
     type: Literal['SShaped'] = "SShaped"
-    alpha_ave: PositiveFloat = .88
-    alpha_std: PositiveFloat = .03
-    beta_ave: PositiveFloat = 1e2
-    beta_std: PositiveFloat = 1000
+    alpha_ave: Optional[PositiveFloat] = .88
+    alpha_std: Optional[PositiveFloat] = .03
+    beta_ave: Optional[PositiveFloat] = 1e2
+    beta_std: Optional[PositiveFloat] = 1000
 
     def build(self, var_name, model=None):
         model = pm.modelcontext(model)
         alpha_mu = self.alpha_ave
         alpha_sigma = self.alpha_std
-        beta_mu = np.log(self.beta_ave)/8
-        beta_sigma = self.beta_std/10e8
+        beta_mu = np.log(self.beta_ave)/8/np.log(10)
+        beta_sigma = np.log(self.beta_std)/np.log(10)/8
         with model:
             alpha = pm.Beta(
                 f"{var_name}_alpha", 
                 mu=alpha_mu,
-                alpha_sigma = alpha_sigma
+                sigma = alpha_sigma
             )
             beta_ = pm.Beta(
                 f"{var_name}_beta_",
@@ -165,3 +167,6 @@ class SShapedPrior(Prior):
                 10**(beta_*8)
             )
         return alpha, beta
+    
+class InterceptPrior(ControlCoeffPrior):
+    pass

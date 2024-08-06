@@ -22,3 +22,7 @@ def power(x, alpha: float):
 def log(x):
     return np.log(x)
 
+def hill(x, K, n):
+    mean = x.mean(axis=-1)
+    x_ = x/mean[...,None]
+    return x_**n/(K**n + x_**n)
