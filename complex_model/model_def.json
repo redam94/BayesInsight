@@ -1,0 +1,91 @@
+{
+  "variable_details": [
+    {
+      "variable_name": "Promotion_Total_Total_Total",
+      "variable_type": "control",
+      "deterministic_transform": {
+        "functional_form": "linear",
+        "params": null
+      },
+      "normalization": "none",
+      "std": null,
+      "mean": null,
+      "time_transform": null,
+      "sign": null,
+      "partial_pooling_sigma": 1.0,
+      "coeff_prior": {
+        "coeff_dist": "Normal",
+        "coeff_params": {
+          "mu": 0.0,
+          "sigma": 3.0
+        }
+      },
+      "fixed_ind_coeff_dims": null,
+      "random_coeff_dims": [
+        "Geography",
+        "Product"
+      ]
+    },
+    {
+      "variable_name": "media_var_0_Total_Total_Total",
+      "variable_type": "media",
+      "deterministic_transform": {
+        "functional_form": "linear",
+        "params": null
+      },
+      "normalization": "none",
+      "std": null,
+      "mean": null,
+      "time_transform": null,
+      "sign": "positive",
+      "partial_pooling_sigma": 1.0,
+      "adstock": "delayed",
+      "media_transform": "hill",
+      "coeff_prior": {
+        "coeff_dist": "LogNormal",
+        "coeff_params": {
+          "mu": -2.995732273553991,
+          "sigma": 0.26236426446749106
+        }
+      },
+      "fixed_ind_coeff_dims": null,
+      "random_coeff_dims": null,
+      "media_transform_prior": {
+        "type": "Hill",
+        "K_ave": 0.85,
+        "K_std": 0.6,
+        "n_ave": 1.5,
+        "n_std": 1.2
+      }
+    },
+    {
+      "variable_name": "Stock_Total_Total_Total",
+      "variable_type": "exog",
+      "deterministic_transform": {
+        "functional_form": "linear",
+        "params": null
+      },
+      "normalization": "none",
+      "std": null,
+      "mean": null,
+      "time_transform": null,
+      "sign": null,
+      "partial_pooling_sigma": 1.0,
+      "intercept_prior": {
+        "coeff_dist": "Normal",
+        "coeff_params": {
+          "mu": 0.0,
+          "sigma": 3.0
+        }
+      },
+      "fixed_ind_coeff_dims": null,
+      "random_coeff_dims": null,
+      "likelihood": {
+        "type": "Poisson"
+      }
+    }
+  ],
+  "artifact": null,
+  "fitted": false,
+  "VOF": null
+}

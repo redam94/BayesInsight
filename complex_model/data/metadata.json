@@ -1,0 +1,41 @@
+{
+  "metadata": {
+    "allowed_geos": [
+      "DE",
+      "FR",
+      "KR",
+      "AU",
+      "UK",
+      "MX",
+      "CA",
+      "BR",
+      "JP",
+      "US"
+    ],
+    "allowed_products": [
+      "Laptops",
+      "Desktops",
+      "Phones",
+      "Tablets",
+      "Watches"
+    ],
+    "allowed_outlets": [
+      "Total"
+    ],
+    "allowed_campaigns": [
+      "Total"
+    ],
+    "allowed_creatives": [
+      "Total"
+    ],
+    "necessary_variables": null,
+    "start_period": null,
+    "end_period": null,
+    "periodicity": "Weekly",
+    "row_ids": [
+      "Geography",
+      "Product",
+      "Period"
+    ]
+  }
+}

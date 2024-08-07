@@ -6,3 +6,4 @@ class VarType(StrEnum):
     control = 'control'
     treatment = 'treatment'
     base = 'base'
+    none = 'none'
