@@ -2,6 +2,7 @@ __pycache__
 *.csv
 *.json
 *.nc
+..bfg-report
 .DS_Store
 !complex_model/data/*.csv
 !complex_model/data/*.json
