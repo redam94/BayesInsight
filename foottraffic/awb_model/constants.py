@@ -5,8 +5,11 @@ from foottraffic.awb_model.transforms import (
     s_origin, s_shaped, 
     hill
 )
-
+from foottraffic.bayes.media_transforms.adstock import (
+  delayed_adstock, weibull_adstock
+)
 from foottraffic.awb_model.types.transform_types import FunctionalForms, MediaTransform
+
 
 MFFCOLUMNS = [
     "Period",
