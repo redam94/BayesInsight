@@ -149,6 +149,8 @@ class VariableDetails(BaseModel):
         return model
     
     def register_variable(self, data: MFF | np.ndarray, model=None):
+        """Add the variable to the model"""
+
         variable = data
         if isinstance(data, MFF):
             variable = self.as_numpy(variable)
@@ -158,9 +160,12 @@ class VariableDetails(BaseModel):
             dims = var_dims()
             var = pm.Data(f"{self.variable_name}", variable, dims=dims)
             var = pm.Deterministic(f"{self.variable_name}_transformed", self.transform(var), dims=dims)
+
         return var
     
+    
     def contributions(self, model=None):
+        """Get the contributions of the variable to the model"""
         model = pm.modelcontext(model)
         with model:
             dims = var_dims()
@@ -176,7 +181,7 @@ class VariableDetails(BaseModel):
 
             contributions = pm.Deterministic(
                 f"{self.variable_name}_contributions",
-                coef[:, :, None]*var, dims=dims
+                coef[..., None]*var, dims=dims
                 )
         return contributions
     
@@ -191,6 +196,7 @@ class ControlVariableDetails(VariableDetails):
 
     @model_validator(mode="after")
     def validate_effects(self):
+        """Check that fixed and random coefficients are orthogonal"""
         if self.random_coeff_dims is None or self.fixed_ind_coeff_dims is None:
             return self
         if set(self.fixed_ind_coeff_dims).intersection(set(self.random_coeff_dims)):
@@ -198,6 +204,7 @@ class ControlVariableDetails(VariableDetails):
         return self
 
     def build_coeff_prior(self, model=None):
+        """Build a prior for the coefficients of the control variable"""
         model = pm.modelcontext(model)
         with model:
             estimate = super().build_coeff_prior()
@@ -205,6 +212,7 @@ class ControlVariableDetails(VariableDetails):
         return estimate
     
     def get_contributions(self, data, model=None):
+        """Get the contributions of the variable to the model"""
         model = pm.modelcontext(model)
         with model:
             estimate = self.build_coeff_prior()
