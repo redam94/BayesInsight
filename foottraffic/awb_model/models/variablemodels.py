@@ -7,7 +7,7 @@ from foottraffic.awb_model.models.priormodel import (
 from foottraffic.awb_model.models.likelihood import Likelihood
 from foottraffic.awb_model.types.likelihood_types import LikelihoodType
 from foottraffic.awb_model.models.dataloading import MFF
-from foottraffic.awb_model.constants import MFFCOLUMNS, TRANSFOMER_MAP, MEDIA_TRANSFORM_MAP
+from foottraffic.awb_model.constants import MFFCOLUMNS, TRANSFOMER_MAP, MEDIA_TRANSFORM_MAP, ADSTOCK_MAP
 from foottraffic.awb_model.utils import var_dims
 
 
