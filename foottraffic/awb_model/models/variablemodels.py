@@ -235,10 +235,29 @@ class MediaVariableDetails(VariableDetails):
         with model:
             return self.media_transform_prior.build(self.variable_name)
     
-    def build_delayed_adstock_priors(self, model=None):
+    def apply_shape_transform(self, data, dims=None, model=None):
+        model = pm.modelcontext(model)
+        with model:
+            media_priors = self.build_media_priors()
+            return pm.Deterministic(f"{self.variable_name}_media_transform", MEDIA_TRANSFORM_MAP[self.media_transform](data, *media_priors), dims=dims)
+        
+    def apply_coeff(self, data, dims=None, model=None):
+        model = pm.modelcontext(model)
+        with model:
+            estimate = self.build_coeff_prior()
+            return pm.Deterministic(f"{self.variable_name}_contribution", estimate[..., None]*data, dims=dims)
+    
+    def build_delayed_adstock_prior(self, model=None):
         model = pm.modelcontext(model)
         with model:
             pass
+
+    def apply_delayed_adstock(self, data, dims=None, model=None):
+        model = pm.modelcontext(model)
+        with model:
+            transformed_data = data
+            return transformed_data
+           
 
     def get_contributions(self, data, model=None):
         model = pm.modelcontext(model)
@@ -247,8 +266,7 @@ class MediaVariableDetails(VariableDetails):
             media_priors = self.build_media_priors()
             dims = var_dims()
             transformed_variable = self.register_variable(data)
-            print(dims)
-            media_transformed = pm.Deterministic(f"{self.variable_name}_media_transform", MEDIA_TRANSFORM_MAP[self.media_transform](transformed_variable, *media_priors), dims=dims)
+            media_transformed = self.apply_shape_transform(transformed_variable, dims=dims)
             contributions = pm.Deterministic(f"{self.variable_name}_contribution", estimate[...,None]*media_transformed, dims=dims)
         return contributions  
 

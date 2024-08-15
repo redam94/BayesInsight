@@ -97,6 +97,12 @@ class DelayedAdStockPrior(Prior):
 
     def build(self, var_name, model=None):
         model = pm.modelcontext(model)
+        retention_rate = pm.Normal(
+            f"{var_name}_retention_rate",
+            np.log(self.retention_rate_mean),
+            np.log(self.retention_rate_std)
+        )
+        
 
 
 class HillPrior(Prior):
