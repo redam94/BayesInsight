@@ -29,7 +29,7 @@ class MetaData(BaseModel):
     def row_ids_validator(cls, v):
         if not "Period" in v:
             return list(v) + ["Period"]
-        return list(col for col in MFFCOLUMNS if ((col in v) and (col != "Period"))) + ["Period"]
+        return tuple(list(col for col in MFFCOLUMNS if ((col in v) and (col != "Period"))) + ["Period"])
     
     def check_values_contained(self, other_set: Set[str], col: str) -> bool:
         try:

@@ -93,7 +93,7 @@ class FoottrafficModel(BaseModel):
         with open(folder/'model_def.json', 'w') as f:
             f.write(self.model_dump_json(exclude=['data', 'trace']))
 
-    def get_variable(self, varname):
+    def get_variable(self, varname: str) -> Union[ControlVariableDetails, MediaVariableDetails, ExogVariableDetails]:
         for var in self.variable_details:
             if var.variable_name == varname:
                 return var
@@ -123,7 +123,7 @@ class FoottrafficModel(BaseModel):
     def get_coords(self):
         meta_data = self.data.metadata
         af = self.data.analytic_dataframe()
-        row_ids = meta_data.row_ids.copy()
+        row_ids = list(meta_data.row_ids) #.copy()
         coords = {
             col: af[col].unique() for col in row_ids
         }
@@ -176,12 +176,13 @@ class FoottrafficModel(BaseModel):
     def plot_posterior_curve(self, media_var):
         if not self.fitted:
             raise ValueError("Model has not been fitted")
+        media_var = self.get_variable(media_var)
         if media_var not in self.return_media_variables():
-            raise ValueError(f"{media_var} is not a media variable")
+            raise ValueError(f"{media_var.variable_name} is not a media variable")
         trace = self.trace
         plt.scatter(
-            self.data.analytic_dataframe()[media_var],
-            trace.posterior[f"{media_var}_contribution"].to_dataframe().groupby(self.data.metadata.row_ids).mean()
+            self.data.analytic_dataframe()[media_var.variable_name],
+            trace.posterior[f"{media_var.variable_name}_contribution"].to_dataframe().groupby(list(self.data.metadata.row_ids)).mean()
         )
     
     def plot_posterior_predictive(self, kind: Literal['kde', 'cumulative', 'scatter']='cumulative', coords=None):
@@ -191,7 +192,7 @@ class FoottrafficModel(BaseModel):
         return az.plot_ppc(posterior, kind=kind, coords=coords)
 
     def get_contributions(self)->pd.DataFrame:
-        row_ids = self.data.metadata.row_ids
+        row_ids = list(self.data.metadata.row_ids)
         contributions = self.data.analytic_dataframe()[row_ids]
 
         if not self.fitted:
@@ -221,19 +222,19 @@ class FoottrafficModel(BaseModel):
     def avm(self, agg='mean'):
         posterior = self.get_posterior_predictive()
         posterior_df = (posterior.posterior_predictive.to_dataframe().reset_index()
-                .groupby(self.data.metadata.row_ids)
+                .groupby(list(self.data.metadata.row_ids))
                 .agg(agg).drop(columns=["chain", "draw"])
                 .reset_index()
                 )
         mu_df = (self.trace.posterior.mu.to_dataframe()
-                .reset_index().groupby(self.data.metadata.row_ids)
+                .reset_index().groupby(list(self.data.metadata.row_ids))
                 .agg(agg).drop(columns=["chain", "draw"])
                 .reset_index())
         var_name = self.return_exog_variables()[0].variable_name
-        af = self.data.analytic_dataframe()[self.data.metadata.row_ids + [var_name]]
-        af = af.merge(posterior_df, on=self.data.metadata.row_ids)
+        af = self.data.analytic_dataframe()[list(self.data.metadata.row_ids) + [var_name]]
+        af = af.merge(posterior_df, on=list(self.data.metadata.row_ids))
 
-        return af.merge(mu_df, on=self.data.metadata.row_ids)
+        return af.merge(mu_df, on=list(self.data.metadata.row_ids))
         
 
     def get_var_con(self, varname:str, agg='mean'):

@@ -264,7 +264,10 @@ class ExogVariableDetails(VariableDetails):
         if self.intercept_prior is None:
             return 0
         with model:
-            intercept = self.intercept_prior.build("intercept")
+            intercept = self.intercept_prior.build(
+                "intercept", fixed_dims=self.fixed_ind_coeff_dims,
+                random_dims=self.random_coeff_dims, pooling_sigma=self.partial_pooling_sigma
+            )
         return intercept
     
     def build_likelihood(self, estimate, obs, model=None):
