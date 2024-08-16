@@ -25,7 +25,7 @@ def _row_ids_to_ind_map(row_ids: list[str]) -> list[int]:
     }
     return ind_map
 
-TransformType = Annotated[
+MediaTransformType = Annotated[
     Union[SShapedPrior, HillPrior],
     Field(discriminator="type")]
 
