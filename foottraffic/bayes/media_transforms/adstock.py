@@ -133,6 +133,22 @@ def batched_convolution(
     conv = pt.sum(padded_x * w[..., None, :], axis=-1)
     # Move the "time" axis back to where it was in the original x array
     return pt.moveaxis(conv, -1, axis + conv.ndim - orig_ndim)
+
+def delayed_adstock_weights(
+        alpha: float=0.0, 
+        theta: int = 0,
+        l_max: int = 12, 
+        dtype: type = float, 
+        normalize: bool=True):
+    
+    w = pt.power(
+        pt.as_tensor(alpha)[..., None],
+        (pt.arange(l_max, dtype=dtype) - pt.as_tensor(theta)[..., None]) ** 2,
+    )
+    return w / pt.sum(w, axis=-1, keepdims=True) if normalize else w
+
+   
+
   
 def delayed_adstock(
     x,
@@ -210,11 +226,7 @@ def delayed_adstock(
     .. [1] Jin, Yuxue, et al. "Bayesian methods for media mix modeling
        with carryover and shape effects." (2017).
     """
-    w = pt.power(
-        pt.as_tensor(alpha)[..., None],
-        (pt.arange(l_max, dtype=x.dtype) - pt.as_tensor(theta)[..., None]) ** 2,
-    )
-    w = w / pt.sum(w, axis=-1, keepdims=True) if normalize else w
+    w = delayed_adstock_weights(alpha=alpha, theta=theta, l_max=l_max, dtype=x.dtype, normalize=normalize)
     return batched_convolution(x, w, axis=axis, mode=mode)
   
 def weibull_adstock(

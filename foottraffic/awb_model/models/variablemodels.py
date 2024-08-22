@@ -294,7 +294,7 @@ class MediaVariableDetails(VariableDetails):
         model = pm.modelcontext(model)
         with model:
             estimate = self.build_coeff_prior()
-            media_priors = self.build_media_priors()
+            #media_priors = self.build_media_priors()
             dims = var_dims()
             transformed_variable = self.register_variable(data)
             media_transformed = self.apply_shape_transform(transformed_variable, dims=dims)

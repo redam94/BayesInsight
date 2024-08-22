@@ -4,7 +4,10 @@ import os
 import json
 from pathlib import Path
 
-from pydantic import BaseModel, NaiveDatetime, Field, field_validator, model_validator, ValidationError, computed_field
+from pydantic import (
+    BaseModel, NaiveDatetime, Field, 
+    field_validator, model_validator, ValidationError, 
+    computed_field, ConfigDict)
 import pandas as pd
 import numpy as np
 
@@ -12,6 +15,7 @@ from foottraffic.awb_model.types.dataloading_types import MFF_ROW, INDEXCOL
 from foottraffic.awb_model.constants import MFFCOLUMNS
 
 class MetaData(BaseModel):
+    
     allowed_geos: Optional[Set[str]] = None
     allowed_products: Optional[Set[str]] = None
     allowed_outlets: Optional[Set[str]] = None
@@ -52,14 +56,16 @@ class MetaData(BaseModel):
         raise ValueError(f"{col} not valid column")
     
 class MFF(BaseModel):
-    data: List[MFF_ROW] = Field(repr=False)
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    data: pd.DataFrame = Field(repr=False)
+    #data: List[MFF_ROW] = Field(repr=False)
     #periodicity: Literal["Weekly", "Daily"] = "Weekly"
     #row_ids: Tuple[INDEXCOL, ...] = Field(default = ("Geography", "Period"), max_length=6, min_length=1)
     metadata: Optional[MetaData] = Field(default=None, repr=False)
 
     @classmethod
     def from_mff_df(cls, df: pd.DataFrame, metadata: Optional[MetaData]=None)->'MFF':
-        data = df.to_dict('records')
+        data = df#.to_dict('records')
         return cls(data=data, metadata=metadata)
     
     def initialize_metadata(self) -> MetaData:
@@ -85,7 +91,7 @@ class MFF(BaseModel):
         
         for col_name in MFFCOLUMNS:
             try:
-                if any(col_name not in set(col for col in row.keys()) for row in v):
+                if col_name not in set(v.columns):
                     raise ValueError(f"{col_name} not in dataset")
             except ValueError as e:
                 errors.append(e)
@@ -106,11 +112,11 @@ class MFF(BaseModel):
             self.initialize_metadata()
         
         if self.metadata.periodicity == "Weekly":
-            day_to_align = pd.to_datetime(self.data[0]['Period']).day_name()
-            if not all(day_to_align == pd.to_datetime(row['Period']).day_name() for row in self.data):
+            self.data['Period'] = pd.to_datetime(self.data['Period'])
+            day_to_align = self.data['Period'].iloc[0].day_name()
+            if not all(day_to_align == self.data['Period'].dt.day_name()):
                 raise ValueError("Weekly data must be aligned to the same date")
         return self
-    
     
     def get_summary_stats(self) -> pd.DataFrame:
         af = self.analytic_dataframe()
@@ -166,9 +172,10 @@ class MFF(BaseModel):
             var_cols = [my_col for my_col in MFFCOLUMNS if my_col not in (["VariableName", "VariableValue", "Period"] + list(self.row_ids))]
             raise ValueError(f"{col} not found in column names. VariableName format is VariableName_{'_'.join(var_cols)}")
         
-    def to_json(self, file: Union[str, Path]) -> None:
-        with open(file, 'w') as f:
-            f.write(self.model_dump_json())
+    #def to_json(self, file: Union[str, Path]) -> None:
+        
+    #    with open(file, 'w') as f:
+    #        f.write(self.model_dump_json())
         
     def to_bundle(self, folder: Union[str, Path]) -> None:
         folder = Path(folder)
@@ -179,13 +186,13 @@ class MFF(BaseModel):
         with open(folder/"metadata.json", 'w') as f:
             f.write(self.model_dump_json(exclude=['data', '_info']))
     
-    @classmethod
-    def from_json(cls, file: Union[str, Path]) -> 'MFF':
-        json_data = json.load(file)
-        try:
-            return cls(data=json_data['data'], metadata=json_data['metadata'])
-        except ValidationError:
-            raise ValidationError
+    #@classmethod
+    #def from_json(cls, file: Union[str, Path]) -> 'MFF':
+    #    json_data = json.load(file)
+    #    try:
+    #        return cls(data=json_data['data'], metadata=json_data['metadata'])
+    #    except ValidationError:
+    #        raise ValidationError
     
     @classmethod
     def from_bundle(cls, folder: Union[str, Path]) -> 'MFF':
@@ -210,12 +217,12 @@ class MFF(BaseModel):
         except AssertionError:
             raise ValueError(f"Must provide a csv file not a {file_extention} type file")
        
-        data = pd.read_csv(file).to_dict(orient='records')
+        data = pd.read_csv(file)
         return cls(data=data, metadata=metadata)
     
     def as_df(self) -> pd.DataFrame:
         """Returns raw dataframe"""
-        return pd.DataFrame(self.data)
+        return self.data
     
     def analytic_dataframe(self, row_id: Optional[Union[List[str], str]]=None, aggfunc: Union[str, Callable[[pd.Series], float]]='sum', indexed=False) -> pd.DataFrame:
         """Returns Analytical Dataframe as a pandas dataframe object"""
@@ -226,7 +233,7 @@ class MFF(BaseModel):
         if not 'Period' in row_id:
             warnings.warn("Period must be included in row_id adding Period to row_id")
             row_id = ['Period'] + row_id
-        df = pd.DataFrame(self.data)[MFFCOLUMNS]
+        df = self.data[MFFCOLUMNS]
         df["Period"] = pd.to_datetime(df["Period"])
         columns = [col for col in MFFCOLUMNS if not col in row_id+["VariableValue", "VariableName"]]
         df = df.pivot_table(index=[col for col in MFFCOLUMNS if col in row_id and not col == "Period"]+["Period"], columns=["VariableName"]+columns, values="VariableValue", aggfunc=aggfunc)
@@ -238,17 +245,17 @@ class MFF(BaseModel):
     
     def get_unique_varnames(self) -> list:
         """Returns list of all variablenames in model"""
-        unique_var_names = list(pd.DataFrame(self.data)["VariableName"].unique())
+        unique_var_names = list(self.data["VariableName"].unique())
         return unique_var_names
     
     def head(self)->pd.DataFrame:
         """Returns head of data"""
-        return pd.DataFrame(self.data)[MFFCOLUMNS].head()
+        return self.data[MFFCOLUMNS].head()
     
     @computed_field
     @property
     def _info(self) -> Dict:
-        df = pd.DataFrame(self.data)
+        df = self.data
         df["Period"] = pd.to_datetime(df["Period"])
         unique_attr = {}
         for col in MFFCOLUMNS:
