@@ -29,6 +29,11 @@ class FoottrafficModel(BaseModel):
     trace: Optional[InferenceData] = None
     VOF: Optional[pd.DataFrame] =None
     
+    def model_af(self):
+        af = self.data.analytic_dataframe()
+        row_ids = list(self.data.metadata.row_ids)
+        vars_in_model = [var.variable_name for var in self.variable_details]
+        return af[row_ids+vars_in_model]
 
     def fit(self, draws=1000, tune=1000, chains=4, overwrite=False):
         if not overwrite:

@@ -56,6 +56,13 @@
         "K_std": 0.6,
         "n_ave": 1.5,
         "n_std": 1.2
+      },
+      "adstock_prior": {
+        "type": "Delayed",
+        "retention_rate_mean": 0.05,
+        "retention_rate_std": 1.2,
+        "lag_min": 0.00001,
+        "lag_max": 3.0
       }
     },
     {

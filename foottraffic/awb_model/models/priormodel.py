@@ -92,17 +92,26 @@ class DelayedAdStockPrior(Prior):
     type: Literal['Delayed'] = "Delayed"
     retention_rate_mean: PositiveFloat = .05
     retention_rate_std: PositiveFloat = 1.2
-    lag_mean: PositiveFloat = 1
-    lag_std: PositiveFloat = .5
+    lag_min: PositiveFloat = 1e-4
+    lag_max: PositiveFloat = 3
 
     def build(self, var_name, model=None):
         model = pm.modelcontext(model)
-        retention_rate = pm.Normal(
-            f"{var_name}_retention_rate",
+        retention_rate_log = pm.Normal(
+            f"{var_name}_retention_rate_log",
             np.log(self.retention_rate_mean),
             np.log(self.retention_rate_std)
         )
-        
+        retention_rate = pm.Deterministic(
+            f"{var_name}_retention_rate",
+            pm.math.exp(retention_rate_log)
+        )
+        lag = pm.Unifrom(
+            f"{var_name}_lag",
+            self.lag_min,
+            self.lag_max
+        )
+        return retention_rate, lag
 
 
 class HillPrior(Prior):

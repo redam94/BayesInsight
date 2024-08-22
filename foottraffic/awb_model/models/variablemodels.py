@@ -1,11 +1,13 @@
 from foottraffic.awb_model.types.variable_types import VarType
 from foottraffic.awb_model.types.transform_types import MediaTransform, Adstock
 from foottraffic.awb_model.models.transformsmodel import DeterministicTransform, Normilization, TimeTransformer
-from foottraffic.awb_model.models.priormodel import MediaCoeffPrior, HillPrior, SShapedPrior, ControlCoeffPrior, InterceptPrior
+from foottraffic.awb_model.models.priormodel import (
+    MediaCoeffPrior, HillPrior, SShapedPrior, 
+    ControlCoeffPrior, InterceptPrior, DelayedAdStockPrior)
 from foottraffic.awb_model.models.likelihood import Likelihood
 from foottraffic.awb_model.types.likelihood_types import LikelihoodType
 from foottraffic.awb_model.models.dataloading import MFF
-from foottraffic.awb_model.constants import MFFCOLUMNS, TRANSFOMER_MAP, MEDIA_TRANSFORM_MAP
+from foottraffic.awb_model.constants import MFFCOLUMNS, TRANSFOMER_MAP, MEDIA_TRANSFORM_MAP, ADSTOCK_MAP
 from foottraffic.awb_model.utils import var_dims
 
 
@@ -23,9 +25,14 @@ def _row_ids_to_ind_map(row_ids: list[str]) -> list[int]:
     }
     return ind_map
 
-TransformType = Annotated[
+MediaTransformType = Annotated[
     Union[SShapedPrior, HillPrior],
     Field(discriminator="type")]
+
+AdstockType = Annotated[
+    Union[DelayedAdStockPrior],
+    Field(discriminator="type")]
+
 class VariableDetails(BaseModel):
     """
     VariableDetails class for tracking variables in the model.
@@ -99,6 +106,7 @@ class VariableDetails(BaseModel):
         return self.normalize(transformed_variable)
     
     def get_variable_values(self, data: MFF) -> pd.Series:
+        """Get the variable values from the analytic dataframe"""
         analytic_dataframe = data.analytic_dataframe(indexed=True)
         try:
             return analytic_dataframe[self.variable_name]
@@ -106,6 +114,8 @@ class VariableDetails(BaseModel):
             raise ValueError(f"{self.variable_name} not in AF. Check spelling.")
         
     def as_numpy(self, data: MFF) -> np.ndarray:
+        """Return variable data in shape suitable for modeling"""
+
         row_dims = (data._info[index_col]["# Unique"] for index_col in data.metadata.row_ids)
         return self.get_variable_values(data).to_numpy().reshape(tuple(row_dims))
     
@@ -125,6 +135,7 @@ class VariableDetails(BaseModel):
  
     
     def enforce_sign(self, model=None):
+        """Enforce the sign of the coefficients"""
         model = pm.modelcontext(model)
         pot = lambda constraint: (pm.math.log(pm.math.switch(constraint, 1, 1e-10)))
         with model:
@@ -138,6 +149,8 @@ class VariableDetails(BaseModel):
         return model
     
     def register_variable(self, data: MFF | np.ndarray, model=None):
+        """Add the variable to the model"""
+
         variable = data
         if isinstance(data, MFF):
             variable = self.as_numpy(variable)
@@ -147,9 +160,12 @@ class VariableDetails(BaseModel):
             dims = var_dims()
             var = pm.Data(f"{self.variable_name}", variable, dims=dims)
             var = pm.Deterministic(f"{self.variable_name}_transformed", self.transform(var), dims=dims)
+
         return var
     
+    
     def contributions(self, model=None):
+        """Get the contributions of the variable to the model"""
         model = pm.modelcontext(model)
         with model:
             dims = var_dims()
@@ -165,7 +181,7 @@ class VariableDetails(BaseModel):
 
             contributions = pm.Deterministic(
                 f"{self.variable_name}_contributions",
-                coef[:, :, None]*var, dims=dims
+                coef[..., None]*var, dims=dims
                 )
         return contributions
     
@@ -180,6 +196,7 @@ class ControlVariableDetails(VariableDetails):
 
     @model_validator(mode="after")
     def validate_effects(self):
+        """Check that fixed and random coefficients are orthogonal"""
         if self.random_coeff_dims is None or self.fixed_ind_coeff_dims is None:
             return self
         if set(self.fixed_ind_coeff_dims).intersection(set(self.random_coeff_dims)):
@@ -187,6 +204,7 @@ class ControlVariableDetails(VariableDetails):
         return self
 
     def build_coeff_prior(self, model=None):
+        """Build a prior for the coefficients of the control variable"""
         model = pm.modelcontext(model)
         with model:
             estimate = super().build_coeff_prior()
@@ -194,6 +212,7 @@ class ControlVariableDetails(VariableDetails):
         return estimate
     
     def get_contributions(self, data, model=None):
+        """Get the contributions of the variable to the model"""
         model = pm.modelcontext(model)
         with model:
             estimate = self.build_coeff_prior()
@@ -212,6 +231,7 @@ class MediaVariableDetails(VariableDetails):
     fixed_ind_coeff_dims: Optional[list[str]] = None
     random_coeff_dims: Optional[list[str]] = None
     media_transform_prior: Union[HillPrior, SShapedPrior] = HillPrior()
+    adstock_prior: AdstockType = DelayedAdStockPrior()
     sign: Literal['positive'] = 'positive'
 
     @model_validator(mode="after")
@@ -234,7 +254,18 @@ class MediaVariableDetails(VariableDetails):
         model = pm.modelcontext(model)
         with model:
             return self.media_transform_prior.build(self.variable_name)
+        
+    def build_adstock_prior(self, model=None):
+        model = pm.modelcontext(model)
+        with model:
+            return self.adstock_prior.build(self.variable_name)
     
+    def apply_adstock(self, data, dims=None, model=None):
+        model = pm.modelcontext(model)
+        with model:
+            adstock_prior = self.build_adstock_prior()
+            return pm.Deterministic(f"{self.variable_name}_adstock", ADSTOCK_MAP[self.adstock](data, *adstock_prior), dims=dims)
+
     def apply_shape_transform(self, data, dims=None, model=None):
         model = pm.modelcontext(model)
         with model:
@@ -263,7 +294,7 @@ class MediaVariableDetails(VariableDetails):
         model = pm.modelcontext(model)
         with model:
             estimate = self.build_coeff_prior()
-            media_priors = self.build_media_priors()
+            #media_priors = self.build_media_priors()
             dims = var_dims()
             transformed_variable = self.register_variable(data)
             media_transformed = self.apply_shape_transform(transformed_variable, dims=dims)
