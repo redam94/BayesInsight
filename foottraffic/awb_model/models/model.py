@@ -84,6 +84,7 @@ class FoottrafficModel(BaseModel):
 
         return model
     
+    
     def save(self, folder):
         
         if isinstance(folder, str):
@@ -178,6 +179,12 @@ class FoottrafficModel(BaseModel):
         else:
             return [self._plot_posterior(var) for var in varname]
         
+    def get_prior_predictive(self):
+        model = self.build()
+        with model:
+            prior = pm.sample_prior_predictive()
+        return prior
+    
     def plot_posterior_curve(self, media_var):
         if not self.fitted:
             raise ValueError("Model has not been fitted")
