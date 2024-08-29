@@ -3,6 +3,7 @@ __pycache__
 *.json
 *.nc
 ..bfg-report
+first_ft_model.ipynb
 .DS_Store
 !complex_model/data/*.csv
 !complex_model/data/*.json
