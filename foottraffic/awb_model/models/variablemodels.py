@@ -50,7 +50,7 @@ class VariableDetails(BaseModel):
     """
 
     variable_name: str
-    variable_type: Literal["control", "exog", 'media', 'base']
+    variable_type: Literal["control", "exog", 'media', 'base', 'season', 'localtrend']
     deterministic_transform: DeterministicTransform = DeterministicTransform(functional_form='linear', params=None)
     normalization: Normilization = Normilization.none
     std: Optional[float] = None
@@ -341,3 +341,7 @@ class ExogVariableDetails(VariableDetails):
         with model:
             return self.register_variable(data)
         
+class LocalTrendsVariableDetails(VariableDetails):
+    variable_type: Literal['localtrend'] = 'localtrend'
+    num_splines: int = 6
+    

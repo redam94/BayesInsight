@@ -185,3 +185,22 @@ class SShapedPrior(Prior):
     
 class InterceptPrior(ControlCoeffPrior):
     pass
+
+class LocalTrendPrior(Prior):
+    type: Literal['LocalTrend'] = "LocalTrend"
+    n_splines: int = 6
+    
+    
+    def build(self, var_name, random_dims=None, grouping_dims=None, model=None):
+        model = pm.modelcontext(model)
+        with model:
+            with pm.Model(name=f"LT_{var_name}", coords={
+                'splines': np.arange(self.n_splines),
+                }) as spline_model:
+                trends_betas_mu = pm.Normal("trends_betas_mu", mu=0, sigma=3, dims=("splines",))
+                trends_betas_sd = pm.HalfNormal("trends_betas_sd", sigma=3, dims=("splines",))
+                trends_betas = pm.Normal("trends_betas", mu=trends_betas_mu, sigma=trends_betas_sd, dims=("region", "splines"))
+                trends_betas_geo_sd = pm.HalfNormal("trends_betas_geo_sd", sigma=1, dims=("region"))
+                #trends_betas_geo = pm.Normal("trends_betas_geos", mu=trends_betas[region_data, :], sigma=trends_betas_geo_sd[region_data, None], dims=("geo", "splines"))
+
+    
