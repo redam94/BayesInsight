@@ -238,6 +238,7 @@ class MFF(BaseModel):
         columns = [col for col in MFFCOLUMNS if not col in row_id+["VariableValue", "VariableName"]]
         df = df.pivot_table(index=[col for col in MFFCOLUMNS if col in row_id and not col == "Period"]+["Period"], columns=["VariableName"]+columns, values="VariableValue", aggfunc=aggfunc)
         df.columns = ["_".join(col) for col in df.columns]
+        df = df.sort_index()
         if indexed:
             return df
         return df.reset_index()
