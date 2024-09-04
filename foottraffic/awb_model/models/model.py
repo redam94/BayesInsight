@@ -35,13 +35,13 @@ class FoottrafficModel(BaseModel):
         vars_in_model = [var.variable_name for var in self.variable_details]
         return af[row_ids+vars_in_model]
 
-    def fit(self, draws=1000, tune=1000, chains=4, overwrite=False):
+    def fit(self, draws=1000, tune=1000, chains=4, overwrite=False, **kwargs):
         if not overwrite:
             if self.fitted:
                 raise UserWarning("Model was already fitted! If you ment to call fit again set overwrite to True")
         model = self.build()
         with model:
-            trace = pm.sample(draws, tune=tune, chains=chains)
+            trace = pm.sample(draws, tune=tune, chains=chains, **kwargs)
         self.fitted = True
         self.trace = trace
 

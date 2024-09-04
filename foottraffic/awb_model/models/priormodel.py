@@ -188,14 +188,12 @@ class InterceptPrior(ControlCoeffPrior):
 
 class LocalTrendPrior(Prior):
     type: Literal['LocalTrend'] = "LocalTrend"
-    n_splines: int = 6
     
-    
-    def build(self, var_name, random_dims=None, grouping_dims=None, model=None):
+    def build(self, var_name, n_splines, spline_order, random_dims=None, grouping_dims=None, model=None):
         model = pm.modelcontext(model)
         with model:
             with pm.Model(name=f"LT_{var_name}", coords={
-                'splines': np.arange(self.n_splines),
+                'splines': np.arange(n_splines),
                 }) as spline_model:
                 trends_betas_mu = pm.Normal("trends_betas_mu", mu=0, sigma=3, dims=("splines",))
                 trends_betas_sd = pm.HalfNormal("trends_betas_sd", sigma=3, dims=("splines",))
