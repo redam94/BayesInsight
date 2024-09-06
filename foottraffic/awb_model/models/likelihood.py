@@ -1,3 +1,4 @@
+from typing import Optional, List
 from foottraffic.awb_model.types.likelihood_types import LikelihoodType
 from foottraffic.awb_model.utils import row_ids_to_ind_map, var_dims, enforce_dim_order, check_coord, check_dim
 
@@ -17,6 +18,7 @@ def requires_nu(likelihood: LikelihoodType):
   return likelihood in ['StudentT']
 class Likelihood(BaseModel):
   type: LikelihoodType
+  dispersion_dims: Optional[List[str]] = None
 
   def build(self, varname, estimate, obs, model=None):
     model = pm.modelcontext(model)
@@ -25,13 +27,13 @@ class Likelihood(BaseModel):
     var_dim = var_dims(model)
     with model:
       if requires_dispersion(self.type):
-        alpha = pm.Exponential(f"{varname}_alpha", lam=.2)
+        alpha = pm.Exponential(f"{varname}_alpha", lam=3)
         dispersion_params['alpha'] = alpha
       elif requires_prob(self.type):
-        psi = pm.Beta(f"{varname}_psi", alpha=1, beta=1)
+        psi = pm.Beta(f"{varname}_psi", alpha=1, beta=1, dims=self.dispersion_dims)
         dispersion_params['psi'] = psi
       elif requires_sd(self.type):
-        sigma = pm.Exponential(f"{varname}_sigma", lam=1)
+        sigma = pm.Exponential(f"{varname}_sigma", lam=1, dims=self.dispersion_dims)
         dispersion_params['sigma'] = sigma
       
       lik = likelihood(f"{varname}_likelihood", mu=estimate, **dispersion_params, observed=obs, dims=var_dim)

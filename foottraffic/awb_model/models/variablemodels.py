@@ -264,7 +264,7 @@ class MediaVariableDetails(VariableDetails):
         model = pm.modelcontext(model)
         with model:
             adstock_prior = self.build_adstock_prior()
-            return pm.Deterministic(f"{self.variable_name}_adstock", ADSTOCK_MAP[self.adstock](data, *adstock_prior), dims=dims)
+            return pm.Deterministic(f"{self.variable_name}_adstock", ADSTOCK_MAP[self.adstock](data, alpha=adstock_prior[0], theta=adstock_prior[1], normalize=True, axis=-1), dims=dims)
 
     def apply_shape_transform(self, data, dims=None, model=None):
         model = pm.modelcontext(model)
@@ -298,7 +298,8 @@ class MediaVariableDetails(VariableDetails):
             dims = var_dims()
             transformed_variable = self.register_variable(data)
             media_transformed = self.apply_shape_transform(transformed_variable, dims=dims)
-            contributions = pm.Deterministic(f"{self.variable_name}_contribution", estimate[...,None]*media_transformed, dims=dims)
+            ad_stocked = self.apply_adstock(media_transformed, dims=dims)
+            contributions = pm.Deterministic(f"{self.variable_name}_contribution", estimate[...,None]*ad_stocked, dims=dims)
         return contributions  
 
 class ExogVariableDetails(VariableDetails):

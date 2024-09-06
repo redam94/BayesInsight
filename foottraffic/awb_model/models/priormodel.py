@@ -90,27 +90,28 @@ class ControlCoeffPrior(CoeffPrior):
 
 class DelayedAdStockPrior(Prior):
     type: Literal['Delayed'] = "Delayed"
-    retention_rate_mean: PositiveFloat = .05
-    retention_rate_std: PositiveFloat = 1.2
+    retention_rate_mean: PositiveFloat = .2
+    retention_rate_std: PositiveFloat = 10
     lag_min: PositiveFloat = 1e-4
     lag_max: PositiveFloat = 3
 
     def build(self, var_name, model=None):
         model = pm.modelcontext(model)
-        retention_rate_log = pm.Normal(
+        retention_rate = pm.Beta(
             f"{var_name}_retention_rate_log",
-            np.log(self.retention_rate_mean),
-            np.log(self.retention_rate_std)
+            mu=self.retention_rate_mean,
+            nu=self.retention_rate_std
         )
-        retention_rate = pm.Deterministic(
-            f"{var_name}_retention_rate",
-            pm.math.exp(retention_rate_log)
-        )
-        lag = pm.Unifrom(
-            f"{var_name}_lag",
-            self.lag_min,
-            self.lag_max
-        )
+        #retention_rate = pm.Deterministic(
+        #    f"{var_name}_retention_rate",
+        #    pm.math.exp(retention_rate_log)
+        #)
+        #lag = pm.Uniform(
+        #    f"{var_name}_lag",
+        #    self.lag_min,
+        #    self.lag_max
+        #)
+        lag = pm.Exponential(f"{var_name}_lag", self.lag_max)
         return retention_rate, lag
 
 
@@ -189,7 +190,12 @@ class InterceptPrior(ControlCoeffPrior):
 class LocalTrendPrior(Prior):
     type: Literal['LocalTrend'] = "LocalTrend"
     
-    def build(self, var_name, n_splines, spline_order, random_dims=None, grouping_dims=None, model=None):
+    def build(
+            self, var_name, n_splines, spline_order, 
+            random_dims=None, fixed_dims=None, grouping_dims=None,
+            model=None
+            ):
+        
         model = pm.modelcontext(model)
         with model:
             with pm.Model(name=f"LT_{var_name}", coords={
