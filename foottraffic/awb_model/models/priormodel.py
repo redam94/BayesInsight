@@ -6,7 +6,7 @@ import numpy as np
 import pymc as pm
 import pytensor.tensor as pt
 
-from typing import Dict, Literal, Optional
+from typing import Dict, Literal, Optional, Union, List
 
 class Prior(BaseModel):
     def build(self, varname, model=None, **kwargs):
@@ -161,7 +161,7 @@ class SShapedPrior(Prior):
     beta_ave: Optional[PositiveFloat] = 1e2
     beta_std: Optional[PositiveFloat] = 1000
 
-    def build(self, var_name, model=None):
+    def build(self, var_name: str, model=None):
         model = pm.modelcontext(model)
         alpha_mu = self.alpha_ave
         alpha_sigma = self.alpha_std
@@ -189,22 +189,71 @@ class InterceptPrior(ControlCoeffPrior):
 
 class LocalTrendPrior(Prior):
     type: Literal['LocalTrend'] = "LocalTrend"
-    
+    variability: Optional[PositiveFloat] = 1.0
+    group_variablility: Optional[PositiveFloat] = 1.0
+    partial_pooling: Optional[PositiveFloat] = .5
+
     def build(
-            self, var_name, n_splines, spline_order, 
-            random_dims=None, fixed_dims=None, grouping_dims=None,
-            model=None
+            self, var_name: str, n_splines: int, 
+            random_dims: Optional[List[str]]=None, grouping_map: Optional[Union[Dict[str, List[str]], str]]=None,
+            grouping_name: Optional[str]=None, model=None
             ):
         
         model = pm.modelcontext(model)
+
+        coords = {
+            'splines': np.arange(n_splines)
+        }
+        if isinstance(grouping_map, dict):
+            
+            try:
+                assert isinstance(grouping_name, str)
+            except AssertionError:
+                raise ValueError(f"grouping_name must be defined in LocalTrendPrior for {var_name}")
+            
+            try:
+                assert isinstance(random_dims, list)
+                assert len(random_dims) == 1
+            except AssertionError:
+                raise ValueError(f"Random_dims for LocalTrendPrior for {var_name} must be defined with len 1")
+            
+            coords |= {
+                grouping_name: set(grouping_map.keys())
+            }
+            
+            group_array = np.array([[1 if name in group else 0 for key, group in grouping_map.items()] for name in model.coords[random_dims[0]]])
+
         with model:
-            with pm.Model(name=f"LT_{var_name}", coords={
-                'splines': np.arange(n_splines),
-                }) as spline_model:
-                trends_betas_mu = pm.Normal("trends_betas_mu", mu=0, sigma=3, dims=("splines",))
-                trends_betas_sd = pm.HalfNormal("trends_betas_sd", sigma=3, dims=("splines",))
-                trends_betas = pm.Normal("trends_betas", mu=trends_betas_mu, sigma=trends_betas_sd, dims=("region", "splines"))
-                trends_betas_geo_sd = pm.HalfNormal("trends_betas_geo_sd", sigma=1, dims=("region"))
-                #trends_betas_geo = pm.Normal("trends_betas_geos", mu=trends_betas[region_data, :], sigma=trends_betas_geo_sd[region_data, None], dims=("geo", "splines"))
+            with pm.Model(name=f"LLT_{var_name}", coords=coords) as spline_model:
+                
+                if random_dims is None:
+                    tau = pm.HalfCauchy('tau', self.variability)
+                    trends_betas =  pm.GaussianRandomWalk("splines_betas", mu=0, sigma=tau, dims=("splines"))
+                    #trends_betas = pm.Normal("splines_betas", mu=0, sigma=self.variability, dims=("splines",))
+                    return trends_betas
+            
+                
+                if not grouping_name is None:
+                    tau = pm.HalfCauchy('tau', self.variability)
+                    trends_betas_mu =  pm.GaussianRandomWalk("splines_betas_mu", mu=0, sigma=tau, init_dist=pm.Normal.dist(0, 3), dims=("splines"))
+                    #trends_betas_mu = pm.Normal("splines_betas_mu", mu=0, sigma=self.variability, dims=("splines",))
+                    trends_betas_sd = pm.HalfNormal("splines_betas_sd", sigma=self.group_variablility, dims=("splines",))
+                    trends_betas_group = pm.Normal("splines_betas_group", mu=trends_betas_mu, sigma=trends_betas_sd, dims=(grouping_name, "splines"))
+                    trends_betas_geo_sd = pm.HalfNormal("splines_betas_group_sd", sigma=self.partial_pooling, dims=(grouping_name))
+                    trends_betas = pm.Normal("splines_betas", mu=group_array@trends_betas_group, sigma=group_array@trends_betas_geo_sd[:, None], dims=(random_dims[0], "splines"))
+                    return trends_betas
+                
+                tau = pm.HalfCauchy('tau', self.variability)
+                trends_betas_mu =  pm.GaussianRandomWalk("splines_beta_mu", mu=0, sigma=tau, dims=("splines"))
+                #trends_betas_mu = pm.Normal("splines_betas_mu", mu=0, sigma=self.variability, dims=("splines",))
+                trends_betas_sd = pm.HalfNormal("splines_betas_sd", sigma=self.group_variablility, dims=("splines",))
+                trends_betas = pm.Normal("splines_betas", mu=trends_betas_mu, sigma=trends_betas_sd, dims=(*random_dims, "splines"))
+
+                return trends_betas
+                
+                
+
+                
+
 
     
