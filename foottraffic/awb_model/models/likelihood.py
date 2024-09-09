@@ -27,7 +27,7 @@ class Likelihood(BaseModel):
     var_dim = var_dims(model)
     with model:
       if requires_dispersion(self.type):
-        alpha = pm.Exponential(f"{varname}_alpha", lam=3)
+        alpha = pm.InverseGamma(f"{varname}_alpha", 2, 2)
         dispersion_params['alpha'] = alpha
       elif requires_prob(self.type):
         psi = pm.Beta(f"{varname}_psi", alpha=1, beta=1, dims=self.dispersion_dims)

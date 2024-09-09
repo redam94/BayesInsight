@@ -189,9 +189,10 @@ class InterceptPrior(ControlCoeffPrior):
 
 class LocalTrendPrior(Prior):
     type: Literal['LocalTrend'] = "LocalTrend"
-    variability: Optional[PositiveFloat] = 1.0
-    group_variablility: Optional[PositiveFloat] = 1.0
-    partial_pooling: Optional[PositiveFloat] = .5
+    variability: Optional[PositiveFloat] = .2
+    group_variablility: Optional[PositiveFloat] = .2
+    partial_pooling: Optional[PositiveFloat] = .1
+    initial_dist_var: Optional[PositiveFloat] = 1.0
 
     def build(
             self, var_name: str, n_splines: int, 
@@ -200,12 +201,11 @@ class LocalTrendPrior(Prior):
             ):
         
         model = pm.modelcontext(model)
-
         coords = {
             'splines': np.arange(n_splines)
         }
-        if isinstance(grouping_map, dict):
-            
+
+        if isinstance(grouping_map, dict):    
             try:
                 assert isinstance(grouping_name, str)
             except AssertionError:
@@ -228,14 +228,14 @@ class LocalTrendPrior(Prior):
                 
                 if random_dims is None:
                     tau = pm.HalfCauchy('tau', self.variability)
-                    trends_betas =  pm.GaussianRandomWalk("splines_betas", mu=0, sigma=tau, dims=("splines"))
+                    trends_betas =  pm.GaussianRandomWalk("splines_betas", mu=0, sigma=tau, init_dist=pm.Normal.dist(0, self.initial_dist_var), dims=("splines"))
                     #trends_betas = pm.Normal("splines_betas", mu=0, sigma=self.variability, dims=("splines",))
                     return trends_betas
             
                 
                 if not grouping_name is None:
                     tau = pm.HalfCauchy('tau', self.variability)
-                    trends_betas_mu =  pm.GaussianRandomWalk("splines_betas_mu", mu=0, sigma=tau, init_dist=pm.Normal.dist(0, 3), dims=("splines"))
+                    trends_betas_mu =  pm.GaussianRandomWalk("splines_betas_mu", mu=0, sigma=tau, init_dist=pm.Normal.dist(0, self.initial_dist_var), dims=("splines"))
                     #trends_betas_mu = pm.Normal("splines_betas_mu", mu=0, sigma=self.variability, dims=("splines",))
                     trends_betas_sd = pm.HalfNormal("splines_betas_sd", sigma=self.group_variablility, dims=("splines",))
                     trends_betas_group = pm.Normal("splines_betas_group", mu=trends_betas_mu, sigma=trends_betas_sd, dims=(grouping_name, "splines"))
@@ -244,7 +244,7 @@ class LocalTrendPrior(Prior):
                     return trends_betas
                 
                 tau = pm.HalfCauchy('tau', self.variability)
-                trends_betas_mu =  pm.GaussianRandomWalk("splines_beta_mu", mu=0, sigma=tau, dims=("splines"))
+                trends_betas_mu =  pm.GaussianRandomWalk("splines_beta_mu", mu=0, sigma=tau, init_dist=pm.Normal.dist(0, self.initial_dist_var), dims=("splines"))
                 #trends_betas_mu = pm.Normal("splines_betas_mu", mu=0, sigma=self.variability, dims=("splines",))
                 trends_betas_sd = pm.HalfNormal("splines_betas_sd", sigma=self.group_variablility, dims=("splines",))
                 trends_betas = pm.Normal("splines_betas", mu=trends_betas_mu, sigma=trends_betas_sd, dims=(*random_dims, "splines"))

@@ -1,5 +1,5 @@
 from foottraffic.awb_model.models.dataloading import MFF
-from foottraffic.awb_model.models.variablemodels import ExogVariableDetails, ControlVariableDetails, MediaVariableDetails
+from foottraffic.awb_model.models.variablemodels import ExogVariableDetails, ControlVariableDetails, MediaVariableDetails, LocalTrendsVariableDetails
 from foottraffic.awb_model.utils import var_dims
 from foottraffic.awb_model.constants import MFFCOLUMNS
 
@@ -17,7 +17,7 @@ from pathlib import Path
 import os
 
 Variable = Annotated[
-    Union[ControlVariableDetails, MediaVariableDetails, ExogVariableDetails],
+    Union[ControlVariableDetails, MediaVariableDetails, ExogVariableDetails, LocalTrendsVariableDetails],
     Field(discriminator="variable_type")]
 
 class FoottrafficModel(BaseModel):
@@ -32,7 +32,7 @@ class FoottrafficModel(BaseModel):
     def model_af(self):
         af = self.data.analytic_dataframe()
         row_ids = list(self.data.metadata.row_ids)
-        vars_in_model = [var.variable_name for var in self.variable_details]
+        vars_in_model = [var.variable_name for var in self.variable_details if not var.variable_type in ['localtrend', 'season']]
         return af[row_ids+vars_in_model]
 
     def fit(self, draws=1000, tune=1000, chains=4, overwrite=False, **kwargs):
@@ -52,6 +52,7 @@ class FoottrafficModel(BaseModel):
         coords = self.get_coords()
         media_variables = self.return_media_variables()
         control_variables = self.return_control_variables()
+        trend_variables = self.return_trend_variables()
         exog_variables = self.return_exog_variables()
         
         assert len(exog_variables) == 1, "Only one exog variable is supported"
@@ -71,10 +72,17 @@ class FoottrafficModel(BaseModel):
                 contributions_ = var.get_contributions(data)
                 
                 contributions = contributions + contributions_
+            
+            for var in trend_variables:
+                contributions_ = var.get_contributions(data)
+                
+                contributions = contributions + contributions_
+
             for var in control_variables:
                 contributions_ = var.get_contributions(data)
                 
                 contributions = contributions + contributions_
+            
             if exog_variable.likelihood.type == 'Normal':
                 mu = pm.Deterministic('mu', contributions, dims=var_dim)
             else:
@@ -125,6 +133,13 @@ class FoottrafficModel(BaseModel):
             if var.variable_type == 'control':
                 control_vars.append(var)
         return control_vars
+    
+    def return_trend_variables(self) -> List[LocalTrendsVariableDetails]:
+        trend_vars = []
+        for var in self.variable_details:
+            if var.variable_type == "localtrend":
+                trend_vars.append(var)
+        return trend_vars
     
     def get_coords(self):
         meta_data = self.data.metadata

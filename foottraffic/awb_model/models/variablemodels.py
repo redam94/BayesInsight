@@ -3,12 +3,13 @@ from foottraffic.awb_model.types.transform_types import MediaTransform, Adstock
 from foottraffic.awb_model.models.transformsmodel import DeterministicTransform, Normilization, TimeTransformer
 from foottraffic.awb_model.models.priormodel import (
     MediaCoeffPrior, HillPrior, SShapedPrior, 
-    ControlCoeffPrior, InterceptPrior, DelayedAdStockPrior)
+    ControlCoeffPrior, InterceptPrior, DelayedAdStockPrior,
+    LocalTrendPrior)
 from foottraffic.awb_model.models.likelihood import Likelihood
 from foottraffic.awb_model.types.likelihood_types import LikelihoodType
 from foottraffic.awb_model.models.dataloading import MFF
 from foottraffic.awb_model.constants import MFFCOLUMNS, TRANSFOMER_MAP, MEDIA_TRANSFORM_MAP, ADSTOCK_MAP
-from foottraffic.awb_model.utils import var_dims
+from foottraffic.awb_model.utils import var_dims, spline_matrix
 
 
 from typing import Optional, Union, Literal, Annotated
@@ -218,7 +219,6 @@ class ControlVariableDetails(VariableDetails):
             estimate = self.build_coeff_prior()
             dims = var_dims()
             variable = self.register_variable(data)
-            print(dims)
             contributions = pm.Deterministic(f"{self.variable_name}_contribution", estimate[..., None]*variable, dims=dims)
         return contributions                                 
     
@@ -338,11 +338,47 @@ class ExogVariableDetails(VariableDetails):
             #var = pm.Deterministic(f"{self.variable_name}_transformed", self.transform(var), dims=dims)
         return var
     def get_observation(self, data, model=None):
+        
         model = pm.modelcontext(model)
         with model:
             return self.register_variable(data)
         
 class LocalTrendsVariableDetails(VariableDetails):
     variable_type: Literal['localtrend'] = 'localtrend'
-    num_splines: int = 6
+    num_knots: int = 6 # Assuming 3 years of data ~1 knot every 6 months
+    order: int = 3 # Cubic Splines as default
+    random_coeff_dims: Optional[list[str]] = None
+    llt_prior: LocalTrendPrior = LocalTrendPrior()
+    grouping_map: Optional[dict[str, list[str]]] = None
+    grouping_name: Optional[str] = None
+
+    def register_variable(self, data: MFF | np.ndarray, model=None):
+        spline_mat = spline_matrix(data.data, 'Period', n_knots=self.num_knots, order=self.order)
+        model = pm.modelcontext(model)
+        self.__n_splines = spline_mat.shape[1]
+        model.add_coord(f"{self.variable_name}_splines", np.arange(self.__n_splines))
+        with model:
+            variable = pm.Data(f"{self.variable_name}_spline_matrix", spline_mat, dims=("Period", f"{self.variable_name}_splines"))
+        return variable
+
+    def build_coeff_prior(self, n_splines:int, model: pm.Model | None = None):
+        
+        betas = self.llt_prior.build(
+            self.variable_name, n_splines=n_splines, random_dims=self.random_coeff_dims,
+            grouping_map=self.grouping_map, grouping_name=self.grouping_name
+            )
+        
+        return betas
     
+    def get_contributions(self, data: MFF, model=None):
+        
+        model = pm.modelcontext(model)
+        with model:
+           
+            #media_priors = self.build_media_priors()
+            dims = var_dims()
+            transformed_variable = self.register_variable(data)
+            betas = self.build_coeff_prior(n_splines=self.__n_splines)
+            
+            contributions = pm.Deterministic(f"{self.variable_name}_contribution", betas @ transformed_variable.T , dims=(*self.random_coeff_dims, "Period"))
+        return contributions  
