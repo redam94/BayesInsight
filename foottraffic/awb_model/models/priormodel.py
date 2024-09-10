@@ -189,10 +189,10 @@ class InterceptPrior(ControlCoeffPrior):
 
 class LocalTrendPrior(Prior):
     type: Literal['LocalTrend'] = "LocalTrend"
-    variability: Optional[PositiveFloat] = .2
-    group_variablility: Optional[PositiveFloat] = .2
-    partial_pooling: Optional[PositiveFloat] = .1
-    initial_dist_var: Optional[PositiveFloat] = 1.0
+    variability: Optional[PositiveFloat] = 2.0
+    group_variablility: Optional[PositiveFloat] = 1.0
+    partial_pooling: Optional[PositiveFloat] = .75
+    initial_dist_var: Optional[PositiveFloat] = 3.0
 
     def build(
             self, var_name: str, n_splines: int, 
