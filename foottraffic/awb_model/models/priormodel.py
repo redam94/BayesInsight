@@ -252,8 +252,20 @@ class LocalTrendPrior(Prior):
                 return trends_betas
                 
                 
+class EventPrior(Prior):
+    type: Literal['Event'] = "Event"
+    tau_sd: Optional[PositiveFloat] = 1.0
+    holiday_sd: Optional[PositiveFloat] = 1.0
+    partial_pooling: Optional[PositiveFloat] = .75
 
-                
 
-
-    
+    def build(
+            self, var_name: str, n_splines: int, 
+            random_dims: Optional[List[str]]=None, grouping_map: Optional[Union[Dict[str, List[str]], str]]=None,
+            grouping_name: Optional[str]=None, model=None
+            ):
+        
+        ...
+ 
+class SeasonPrior(ControlCoeffPrior):
+    pass

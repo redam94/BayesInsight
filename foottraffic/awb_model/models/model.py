@@ -7,6 +7,7 @@ from pydantic import BaseModel, FilePath, Field, ConfigDict, DirectoryPath
 from arviz import InferenceData
 import arviz as az
 import pymc as pm
+import pytensor.tensor as pt
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -86,7 +87,7 @@ class FoottrafficModel(BaseModel):
             if exog_variable.likelihood.type == 'Normal':
                 mu = pm.Deterministic('mu', contributions, dims=var_dim)
             else:
-                mu = pm.Deterministic('mu', pm.math.exp(contributions), dims=var_dim)
+                mu = pm.Deterministic('mu', pm.math.exp(pt.clip(contributions, -20, 20)), dims=var_dim)
             like = exog_variable.build_likelihood(mu, exog_variable.get_observation(data))
             
 
@@ -209,7 +210,7 @@ class FoottrafficModel(BaseModel):
         trace = self.trace
         plt.scatter(
             self.data.analytic_dataframe()[media_var.variable_name],
-            trace.posterior[f"{media_var.variable_name}_contribution"].to_dataframe().groupby(list(self.data.metadata.row_ids)).mean()
+            trace.posterior[f"{media_var.variable_name}_media_transform"].to_dataframe().groupby(list(self.data.metadata.row_ids)).mean()
         )
     
     def plot_posterior_predictive(self, kind: Literal['kde', 'cumulative', 'scatter']='cumulative', coords=None):
@@ -227,7 +228,8 @@ class FoottrafficModel(BaseModel):
         
         media_variables = self.return_media_variables()
         control_variables = self.return_control_variables()
-        
+        trend_variables = self.return_trend_variables()
+
         var_names = ['intercept']
 
         for control_variable in control_variables:
@@ -239,6 +241,10 @@ class FoottrafficModel(BaseModel):
         for var in var_names:
             contributions = contributions.merge(self.get_var_con(var), on=row_ids)
 
+        for trend in trend_variables:
+            trace = np.exp(self.trace.posterior[f"{trend.variable_name}_contribution"] + self.trace.posterior["intercept_contribution"]).mean(dim=("chain", "draw")).to_dataframe(trend.variable_name).reset_index()
+            contributions = contributions.merge(trace, on=row_ids)
+            
         return contributions
         
     def get_posterior_predictive(self):

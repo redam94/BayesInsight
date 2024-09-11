@@ -71,10 +71,11 @@ class VariableDetails(BaseModel):
         if self.normalization == Normilization.global_standardize:
             var = data
             if self.mean is None:
-                self.mean = np.mean(var)
+                self.mean = pm.math.mean(var).eval()
             demeaned = (var - self.mean)
             if self.std is None:
-                self.std = np.std(demeaned)
+                self.std = pt.sqrt(pt.var(demeaned, ddof=1)).eval()
+                print(self.std)
             standardized = demeaned/self.std
             return standardized
         
@@ -382,3 +383,12 @@ class LocalTrendsVariableDetails(VariableDetails):
             
             contributions = pm.Deterministic(f"{self.variable_name}_contribution", betas @ transformed_variable.T , dims=(*self.random_coeff_dims, "Period"))
         return contributions  
+    
+class SeasonVariableDetails(VariableDetails):
+    variable_type: Literal['season'] = 'season'
+    n_fourier: Optional[int] = 5
+    period: Optional[PositiveFloat] = 365.25/7
+
+
+    def __fourier_components(self, mff: MFF):
+        ...
