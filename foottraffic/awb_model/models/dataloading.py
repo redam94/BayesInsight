@@ -206,7 +206,8 @@ class MFF(BaseModel):
         meta_data['row_ids'] = row_ids
         updated_metadata = MetaData(**meta_data)
         self.metadata = updated_metadata
-        
+    
+    
     
     @classmethod
     def load_from_file(cls, file: Union[str, Path], metadata: Optional[MetaData]=None, **kwargs) -> 'MFF':
