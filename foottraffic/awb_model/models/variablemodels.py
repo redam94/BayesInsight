@@ -4,7 +4,7 @@ from foottraffic.awb_model.models.transformsmodel import DeterministicTransform,
 from foottraffic.awb_model.models.priormodel import (
     MediaCoeffPrior, HillPrior, SShapedPrior, 
     ControlCoeffPrior, InterceptPrior, DelayedAdStockPrior,
-    LocalTrendPrior)
+    LocalTrendPrior, SeasonPrior)
 from foottraffic.awb_model.models.likelihood import Likelihood
 from foottraffic.awb_model.types.likelihood_types import LikelihoodType
 from foottraffic.awb_model.models.dataloading import MFF
@@ -75,7 +75,7 @@ class VariableDetails(BaseModel):
             demeaned = (var - self.mean)
             if self.std is None:
                 self.std = pt.sqrt(pt.var(demeaned, ddof=1)).eval()
-                print(self.std)
+                
             standardized = demeaned/self.std
             return standardized
         
@@ -388,7 +388,46 @@ class SeasonVariableDetails(VariableDetails):
     variable_type: Literal['season'] = 'season'
     n_fourier: Optional[int] = 5
     period: Optional[PositiveFloat] = 365.25/7
+    coeff_prior:  Optional[SeasonPrior] = SeasonPrior(type="Season")
+    fixed_ind_coeff_dims: Optional[list[str]] = None
+    random_coeff_dims: Optional[list[str]] = None
+    partial_pooling_sigma: Optional[PositiveFloat] = 1
 
+    def __fourier_components(self, mff: MFF)->pd.DataFrame:
+        n_time_steps = len(mff.data.Period.unique())
+        t = np.linspace(0, 2*np.pi*n_time_steps/self.period, n_time_steps)
+        comps = {}
+        for freq in range(1, self.n_fourier+1):
+            for comp in ['cos', 'sin']:
+                comps |= {f"{comp}_{freq}": getattr(np, comp)(t*freq)}
+        
+        return pd.DataFrame(comps).values
+    
+    
+    def register_variable(self, data: MFF | np.ndarray, model=None):
+        """Add the variable to the model"""
 
-    def __fourier_components(self, mff: MFF):
-        ...
+        variable = self.__fourier_components(data)
+        
+        model = pm.modelcontext(model)
+        model.add_coord(self.variable_name, np.arange(2*self.n_fourier))
+        with model:
+        
+            var = pm.Data(f"{self.variable_name}_data", variable, dims=["Period", self.variable_name])
+            var = pm.Deterministic(f"{self.variable_name}_transformed", self.transform(var.T), dims=[self.variable_name, "Period"])
+
+        return var
+    
+    def build_coeff_prior(self, model: pm.Model | None = None):
+        model = pm.modelcontext(model)
+        return self.coeff_prior.build(self.variable_name, self.n_fourier*2, random_dims=self.random_coeff_dims, fixed_dims=self.fixed_ind_coeff_dims, pooling_sigma=self.partial_pooling_sigma, model=model)
+
+    def get_contributions(self, data: MFF, model=None):
+        
+        model = pm.modelcontext(model)
+        variable = self.register_variable(data, model=model)
+        coeffs = self.build_coeff_prior(model=model)
+        with model:
+            dims = var_dims()
+            contributions = pm.Deterministic(f"{self.variable_name}_contribution", coeffs @ variable, dims=dims)
+        return contributions

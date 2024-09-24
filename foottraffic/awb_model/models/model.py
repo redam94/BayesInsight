@@ -1,5 +1,5 @@
 from foottraffic.awb_model.models.dataloading import MFF
-from foottraffic.awb_model.models.variablemodels import ExogVariableDetails, ControlVariableDetails, MediaVariableDetails, LocalTrendsVariableDetails
+from foottraffic.awb_model.models.variablemodels import ExogVariableDetails, ControlVariableDetails, MediaVariableDetails, LocalTrendsVariableDetails, SeasonVariableDetails
 from foottraffic.awb_model.utils import var_dims
 from foottraffic.awb_model.constants import MFFCOLUMNS
 
@@ -18,7 +18,7 @@ from pathlib import Path
 import os
 
 Variable = Annotated[
-    Union[ControlVariableDetails, MediaVariableDetails, ExogVariableDetails, LocalTrendsVariableDetails],
+    Union[ControlVariableDetails, MediaVariableDetails, ExogVariableDetails, LocalTrendsVariableDetails, SeasonVariableDetails],
     Field(discriminator="variable_type")]
 
 class FoottrafficModel(BaseModel):
@@ -54,6 +54,7 @@ class FoottrafficModel(BaseModel):
         media_variables = self.return_media_variables()
         control_variables = self.return_control_variables()
         trend_variables = self.return_trend_variables()
+        season_variables = self.return_season_variables()
         exog_variables = self.return_exog_variables()
         
         assert len(exog_variables) == 1, "Only one exog variable is supported"
@@ -82,6 +83,10 @@ class FoottrafficModel(BaseModel):
             for var in control_variables:
                 contributions_ = var.get_contributions(data)
                 
+                contributions = contributions + contributions_
+            
+            for var in season_variables:
+                contributions_ = var.get_contributions(data)
                 contributions = contributions + contributions_
             
             if exog_variable.likelihood.type == 'Normal':
@@ -134,6 +139,13 @@ class FoottrafficModel(BaseModel):
             if var.variable_type == 'control':
                 control_vars.append(var)
         return control_vars
+    
+    def return_season_variables(self) -> List[SeasonVariableDetails]:
+        season_vars = []
+        for var in self.variable_details:
+            if var.variable_type=='season':
+                season_vars.append(var)
+        return season_vars
     
     def return_trend_variables(self) -> List[LocalTrendsVariableDetails]:
         trend_vars = []
@@ -229,6 +241,7 @@ class FoottrafficModel(BaseModel):
         media_variables = self.return_media_variables()
         control_variables = self.return_control_variables()
         trend_variables = self.return_trend_variables()
+        season_variables = self.return_season_variables()
 
         var_names = ['intercept']
 
@@ -242,9 +255,14 @@ class FoottrafficModel(BaseModel):
             contributions = contributions.merge(self.get_var_con(var), on=row_ids)
 
         for trend in trend_variables:
-            trace = np.exp(self.trace.posterior[f"{trend.variable_name}_contribution"] + self.trace.posterior["intercept_contribution"]).mean(dim=("chain", "draw")).to_dataframe(trend.variable_name).reset_index()
+            if season_variables:
+                trace = np.exp(self.trace.posterior[f"{season_variables[0].variable_name}_contribution"] + self.trace.posterior[f"{trend.variable_name}_contribution"] + self.trace.posterior["intercept_contribution"]).mean(dim=("chain", "draw")).to_dataframe(trend.variable_name).reset_index()
+            else:
+                trace = np.exp(self.trace.posterior[f"{trend.variable_name}_contribution"] + self.trace.posterior["intercept_contribution"]).mean(dim=("chain", "draw")).to_dataframe(trend.variable_name).reset_index()
             contributions = contributions.merge(trace, on=row_ids)
-            
+        for season in season_variables:
+            trace = self.trace.posterior[f"{season.variable_name}_contribution"].mean(dim=("chain", "draw")).to_dataframe(season.variable_name).reset_index()
+            contributions = contributions.merge(trace, on=row_ids)
         return contributions
         
     def get_posterior_predictive(self):

@@ -268,4 +268,14 @@ class EventPrior(Prior):
         ...
  
 class SeasonPrior(ControlCoeffPrior):
-    pass
+    type: Literal["Season"] = "Season"
+
+    def build(self, variable_name, n_components, random_dims=None, fixed_dims=None, pooling_sigma=1, model=None):
+        model = pm.modelcontext(model)
+        super_ = super()
+        model.add_coord(variable_name, np.arange(n_components))
+        with model:
+            dims = var_dims()
+            coeffs = pm.Deterministic(f"{variable_name}_coeff_estimate", pt.concatenate([super_.build(f"{variable_name}_{comp}", random_dims=random_dims, fixed_dims=fixed_dims, pooling_sigma=pooling_sigma, model=model)[...,None] for comp in range(n_components)], axis=-1), dims=(*dims[:-1], f"{variable_name}"))
+        return coeffs
+
