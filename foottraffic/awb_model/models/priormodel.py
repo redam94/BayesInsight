@@ -6,7 +6,7 @@ import numpy as np
 import pymc as pm
 import pytensor.tensor as pt
 
-from typing import Dict, Literal, Optional
+from typing import Dict, Literal, Optional, Union, List
 
 class Prior(BaseModel):
     def build(self, varname, model=None, **kwargs):
@@ -90,27 +90,28 @@ class ControlCoeffPrior(CoeffPrior):
 
 class DelayedAdStockPrior(Prior):
     type: Literal['Delayed'] = "Delayed"
-    retention_rate_mean: PositiveFloat = .05
-    retention_rate_std: PositiveFloat = 1.2
+    retention_rate_mean: PositiveFloat = .2
+    retention_rate_std: PositiveFloat = 10
     lag_min: PositiveFloat = 1e-4
     lag_max: PositiveFloat = 3
 
     def build(self, var_name, model=None):
         model = pm.modelcontext(model)
-        retention_rate_log = pm.Normal(
+        retention_rate = pm.Beta(
             f"{var_name}_retention_rate_log",
-            np.log(self.retention_rate_mean),
-            np.log(self.retention_rate_std)
+            mu=self.retention_rate_mean,
+            nu=self.retention_rate_std
         )
-        retention_rate = pm.Deterministic(
-            f"{var_name}_retention_rate",
-            pm.math.exp(retention_rate_log)
-        )
-        lag = pm.Unifrom(
-            f"{var_name}_lag",
-            self.lag_min,
-            self.lag_max
-        )
+        #retention_rate = pm.Deterministic(
+        #    f"{var_name}_retention_rate",
+        #    pm.math.exp(retention_rate_log)
+        #)
+        #lag = pm.Uniform(
+        #    f"{var_name}_lag",
+        #    self.lag_min,
+        #    self.lag_max
+        #)
+        lag = pm.Exponential(f"{var_name}_lag", self.lag_max)
         return retention_rate, lag
 
 
@@ -160,7 +161,7 @@ class SShapedPrior(Prior):
     beta_ave: Optional[PositiveFloat] = 1e2
     beta_std: Optional[PositiveFloat] = 1000
 
-    def build(self, var_name, model=None):
+    def build(self, var_name: str, model=None):
         model = pm.modelcontext(model)
         alpha_mu = self.alpha_ave
         alpha_sigma = self.alpha_std
@@ -185,3 +186,96 @@ class SShapedPrior(Prior):
     
 class InterceptPrior(ControlCoeffPrior):
     pass
+
+class LocalTrendPrior(Prior):
+    type: Literal['LocalTrend'] = "LocalTrend"
+    variability: Optional[PositiveFloat] = 2.0
+    group_variablility: Optional[PositiveFloat] = 1.0
+    partial_pooling: Optional[PositiveFloat] = .75
+    initial_dist_var: Optional[PositiveFloat] = 3.0
+
+    def build(
+            self, var_name: str, n_splines: int, 
+            random_dims: Optional[List[str]]=None, grouping_map: Optional[Union[Dict[str, List[str]], str]]=None,
+            grouping_name: Optional[str]=None, model=None
+            ):
+        
+        model = pm.modelcontext(model)
+        coords = {
+            'splines': np.arange(n_splines)
+        }
+
+        if isinstance(grouping_map, dict):    
+            try:
+                assert isinstance(grouping_name, str)
+            except AssertionError:
+                raise ValueError(f"grouping_name must be defined in LocalTrendPrior for {var_name}")
+            
+            try:
+                assert isinstance(random_dims, list)
+                assert len(random_dims) == 1
+            except AssertionError:
+                raise ValueError(f"Random_dims for LocalTrendPrior for {var_name} must be defined with len 1")
+            
+            coords |= {
+                grouping_name: set(grouping_map.keys())
+            }
+            
+            group_array = np.array([[1 if name in group else 0 for key, group in grouping_map.items()] for name in model.coords[random_dims[0]]])
+
+        with model:
+            with pm.Model(name=f"LLT_{var_name}", coords=coords) as spline_model:
+                
+                if random_dims is None:
+                    tau = pm.HalfCauchy('tau', self.variability)
+                    trends_betas =  pm.GaussianRandomWalk("splines_betas", mu=0, sigma=tau, init_dist=pm.Normal.dist(0, self.initial_dist_var), dims=("splines"))
+                    #trends_betas = pm.Normal("splines_betas", mu=0, sigma=self.variability, dims=("splines",))
+                    return trends_betas
+            
+                
+                if not grouping_name is None:
+                    tau = pm.HalfCauchy('tau', self.variability)
+                    trends_betas_mu =  pm.GaussianRandomWalk("splines_betas_mu", mu=0, sigma=tau, init_dist=pm.Normal.dist(0, self.initial_dist_var), dims=("splines"))
+                    #trends_betas_mu = pm.Normal("splines_betas_mu", mu=0, sigma=self.variability, dims=("splines",))
+                    trends_betas_sd = pm.HalfNormal("splines_betas_sd", sigma=self.group_variablility, dims=("splines",))
+                    trends_betas_group = pm.Normal("splines_betas_group", mu=trends_betas_mu, sigma=trends_betas_sd, dims=(grouping_name, "splines"))
+                    trends_betas_geo_sd = pm.HalfNormal("splines_betas_group_sd", sigma=self.partial_pooling, dims=(grouping_name))
+                    trends_betas = pm.Normal("splines_betas", mu=group_array@trends_betas_group, sigma=group_array@trends_betas_geo_sd[:, None], dims=(random_dims[0], "splines"))
+                    return trends_betas
+                
+                tau = pm.HalfCauchy('tau', self.variability)
+                trends_betas_mu =  pm.GaussianRandomWalk("splines_beta_mu", mu=0, sigma=tau, init_dist=pm.Normal.dist(0, self.initial_dist_var), dims=("splines"))
+                #trends_betas_mu = pm.Normal("splines_betas_mu", mu=0, sigma=self.variability, dims=("splines",))
+                trends_betas_sd = pm.HalfNormal("splines_betas_sd", sigma=self.group_variablility, dims=("splines",))
+                trends_betas = pm.Normal("splines_betas", mu=trends_betas_mu, sigma=trends_betas_sd, dims=(*random_dims, "splines"))
+
+                return trends_betas
+                
+                
+class EventPrior(Prior):
+    type: Literal['Event'] = "Event"
+    tau_sd: Optional[PositiveFloat] = 1.0
+    holiday_sd: Optional[PositiveFloat] = 1.0
+    partial_pooling: Optional[PositiveFloat] = .75
+
+
+    def build(
+            self, var_name: str, n_splines: int, 
+            random_dims: Optional[List[str]]=None, grouping_map: Optional[Union[Dict[str, List[str]], str]]=None,
+            grouping_name: Optional[str]=None, model=None
+            ):
+        
+        ...
+ 
+class SeasonPrior(ControlCoeffPrior):
+    type: Literal["Season"] = "Season"
+
+    def build(self, variable_name, n_components, random_dims=None, fixed_dims=None, pooling_sigma=1, model=None):
+        model = pm.modelcontext(model)
+        super_ = super()
+        model.add_coord(variable_name, np.arange(n_components))
+        with model:
+            dims = var_dims()
+            coeffs = pm.Deterministic(f"{variable_name}_coeff_estimate", pt.concatenate([super_.build(f"{variable_name}_{comp}", random_dims=random_dims, fixed_dims=fixed_dims, pooling_sigma=pooling_sigma, model=model)[...,None] for comp in range(n_components)], axis=-1), dims=(*dims[:-1], f"{variable_name}"))
+        return coeffs
+

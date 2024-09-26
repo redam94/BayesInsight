@@ -1,5 +1,5 @@
 from foottraffic.awb_model.models.dataloading import MFF
-from foottraffic.awb_model.models.variablemodels import ExogVariableDetails, ControlVariableDetails, MediaVariableDetails
+from foottraffic.awb_model.models.variablemodels import ExogVariableDetails, ControlVariableDetails, MediaVariableDetails, LocalTrendsVariableDetails, SeasonVariableDetails
 from foottraffic.awb_model.utils import var_dims
 from foottraffic.awb_model.constants import MFFCOLUMNS
 
@@ -7,6 +7,7 @@ from pydantic import BaseModel, FilePath, Field, ConfigDict, DirectoryPath
 from arviz import InferenceData
 import arviz as az
 import pymc as pm
+import pytensor.tensor as pt
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -17,7 +18,7 @@ from pathlib import Path
 import os
 
 Variable = Annotated[
-    Union[ControlVariableDetails, MediaVariableDetails, ExogVariableDetails],
+    Union[ControlVariableDetails, MediaVariableDetails, ExogVariableDetails, LocalTrendsVariableDetails, SeasonVariableDetails],
     Field(discriminator="variable_type")]
 
 class FoottrafficModel(BaseModel):
@@ -32,16 +33,16 @@ class FoottrafficModel(BaseModel):
     def model_af(self):
         af = self.data.analytic_dataframe()
         row_ids = list(self.data.metadata.row_ids)
-        vars_in_model = [var.variable_name for var in self.variable_details]
+        vars_in_model = [var.variable_name for var in self.variable_details if not var.variable_type in ['localtrend', 'season']]
         return af[row_ids+vars_in_model]
 
-    def fit(self, draws=1000, tune=1000, chains=4, overwrite=False):
+    def fit(self, draws=1000, tune=1000, chains=4, overwrite=False, **kwargs):
         if not overwrite:
             if self.fitted:
                 raise UserWarning("Model was already fitted! If you ment to call fit again set overwrite to True")
         model = self.build()
         with model:
-            trace = pm.sample(draws, tune=tune, chains=chains)
+            trace = pm.sample(draws, tune=tune, chains=chains, **kwargs)
         self.fitted = True
         self.trace = trace
 
@@ -52,6 +53,8 @@ class FoottrafficModel(BaseModel):
         coords = self.get_coords()
         media_variables = self.return_media_variables()
         control_variables = self.return_control_variables()
+        trend_variables = self.return_trend_variables()
+        season_variables = self.return_season_variables()
         exog_variables = self.return_exog_variables()
         
         assert len(exog_variables) == 1, "Only one exog variable is supported"
@@ -71,14 +74,25 @@ class FoottrafficModel(BaseModel):
                 contributions_ = var.get_contributions(data)
                 
                 contributions = contributions + contributions_
+            
+            for var in trend_variables:
+                contributions_ = var.get_contributions(data)
+                
+                contributions = contributions + contributions_
+
             for var in control_variables:
                 contributions_ = var.get_contributions(data)
                 
                 contributions = contributions + contributions_
+            
+            for var in season_variables:
+                contributions_ = var.get_contributions(data)
+                contributions = contributions + contributions_
+            
             if exog_variable.likelihood.type == 'Normal':
                 mu = pm.Deterministic('mu', contributions, dims=var_dim)
             else:
-                mu = pm.Deterministic('mu', pm.math.exp(contributions), dims=var_dim)
+                mu = pm.Deterministic('mu', pm.math.exp(pt.clip(contributions, -20, 20)), dims=var_dim)
             like = exog_variable.build_likelihood(mu, exog_variable.get_observation(data))
             
 
@@ -125,6 +139,20 @@ class FoottrafficModel(BaseModel):
             if var.variable_type == 'control':
                 control_vars.append(var)
         return control_vars
+    
+    def return_season_variables(self) -> List[SeasonVariableDetails]:
+        season_vars = []
+        for var in self.variable_details:
+            if var.variable_type=='season':
+                season_vars.append(var)
+        return season_vars
+    
+    def return_trend_variables(self) -> List[LocalTrendsVariableDetails]:
+        trend_vars = []
+        for var in self.variable_details:
+            if var.variable_type == "localtrend":
+                trend_vars.append(var)
+        return trend_vars
     
     def get_coords(self):
         meta_data = self.data.metadata
@@ -194,7 +222,7 @@ class FoottrafficModel(BaseModel):
         trace = self.trace
         plt.scatter(
             self.data.analytic_dataframe()[media_var.variable_name],
-            trace.posterior[f"{media_var.variable_name}_contribution"].to_dataframe().groupby(list(self.data.metadata.row_ids)).mean()
+            trace.posterior[f"{media_var.variable_name}_media_transform"].to_dataframe().groupby(list(self.data.metadata.row_ids)).mean()
         )
     
     def plot_posterior_predictive(self, kind: Literal['kde', 'cumulative', 'scatter']='cumulative', coords=None):
@@ -212,7 +240,9 @@ class FoottrafficModel(BaseModel):
         
         media_variables = self.return_media_variables()
         control_variables = self.return_control_variables()
-        
+        trend_variables = self.return_trend_variables()
+        season_variables = self.return_season_variables()
+
         var_names = ['intercept']
 
         for control_variable in control_variables:
@@ -224,6 +254,15 @@ class FoottrafficModel(BaseModel):
         for var in var_names:
             contributions = contributions.merge(self.get_var_con(var), on=row_ids)
 
+        for trend in trend_variables:
+            if season_variables:
+                trace = np.exp(self.trace.posterior[f"{season_variables[0].variable_name}_contribution"] + self.trace.posterior[f"{trend.variable_name}_contribution"] + self.trace.posterior["intercept_contribution"]).mean(dim=("chain", "draw")).to_dataframe(trend.variable_name).reset_index()
+            else:
+                trace = np.exp(self.trace.posterior[f"{trend.variable_name}_contribution"] + self.trace.posterior["intercept_contribution"]).mean(dim=("chain", "draw")).to_dataframe(trend.variable_name).reset_index()
+            contributions = contributions.merge(trace, on=row_ids)
+        for season in season_variables:
+            trace = self.trace.posterior[f"{season.variable_name}_contribution"].mean(dim=("chain", "draw")).to_dataframe(season.variable_name).reset_index()
+            contributions = contributions.merge(trace, on=row_ids)
         return contributions
         
     def get_posterior_predictive(self):

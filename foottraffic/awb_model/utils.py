@@ -1,6 +1,9 @@
 from typing import Union, Optional
 
 import pymc as pm
+import numpy as np
+import pandas as pd
+from patsy import dmatrix
 
 from foottraffic.awb_model.constants import MFFCOLUMNS
 
@@ -36,3 +39,12 @@ def var_dims(model: Optional[pm.Model]=None) -> list:
     model = pm.modelcontext(model)
     var_dims = enforce_dim_order(list(model.coords.keys()), drop_period=False)
     return var_dims
+
+def spline_matrix(data: pd.DataFrame, geo: str, n_knots: int=6, order: int=3):
+  """Outputs spline matrix from data"""
+  t = np.linspace(0, 1, len(data[geo].unique())) # Time is scaled to between 0 and 1
+  knots = np.linspace(0, 1, n_knots+2)[1:-1] # Knots are taken at even intervals
+  
+  B0 = dmatrix("bs(t, knots=knots, degree=order, include_intercept=True) - 1", 
+             {"t": t, "knots": knots, "order": order})
+  return np.asarray(B0)

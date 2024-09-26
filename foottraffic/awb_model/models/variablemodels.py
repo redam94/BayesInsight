@@ -3,12 +3,13 @@ from foottraffic.awb_model.types.transform_types import MediaTransform, Adstock
 from foottraffic.awb_model.models.transformsmodel import DeterministicTransform, Normilization, TimeTransformer
 from foottraffic.awb_model.models.priormodel import (
     MediaCoeffPrior, HillPrior, SShapedPrior, 
-    ControlCoeffPrior, InterceptPrior, DelayedAdStockPrior)
+    ControlCoeffPrior, InterceptPrior, DelayedAdStockPrior,
+    LocalTrendPrior, SeasonPrior)
 from foottraffic.awb_model.models.likelihood import Likelihood
 from foottraffic.awb_model.types.likelihood_types import LikelihoodType
 from foottraffic.awb_model.models.dataloading import MFF
 from foottraffic.awb_model.constants import MFFCOLUMNS, TRANSFOMER_MAP, MEDIA_TRANSFORM_MAP, ADSTOCK_MAP
-from foottraffic.awb_model.utils import var_dims
+from foottraffic.awb_model.utils import var_dims, spline_matrix
 
 
 from typing import Optional, Union, Literal, Annotated
@@ -50,7 +51,7 @@ class VariableDetails(BaseModel):
     """
 
     variable_name: str
-    variable_type: Literal["control", "exog", 'media', 'base']
+    variable_type: Literal["control", "exog", 'media', 'base', 'season', 'localtrend']
     deterministic_transform: DeterministicTransform = DeterministicTransform(functional_form='linear', params=None)
     normalization: Normilization = Normilization.none
     std: Optional[float] = None
@@ -70,10 +71,11 @@ class VariableDetails(BaseModel):
         if self.normalization == Normilization.global_standardize:
             var = data
             if self.mean is None:
-                self.mean = np.mean(var)
+                self.mean = pm.math.mean(var).eval()
             demeaned = (var - self.mean)
             if self.std is None:
-                self.std = np.std(demeaned)
+                self.std = pt.sqrt(pt.var(demeaned, ddof=1)).eval()
+                
             standardized = demeaned/self.std
             return standardized
         
@@ -218,7 +220,6 @@ class ControlVariableDetails(VariableDetails):
             estimate = self.build_coeff_prior()
             dims = var_dims()
             variable = self.register_variable(data)
-            print(dims)
             contributions = pm.Deterministic(f"{self.variable_name}_contribution", estimate[..., None]*variable, dims=dims)
         return contributions                                 
     
@@ -264,7 +265,7 @@ class MediaVariableDetails(VariableDetails):
         model = pm.modelcontext(model)
         with model:
             adstock_prior = self.build_adstock_prior()
-            return pm.Deterministic(f"{self.variable_name}_adstock", ADSTOCK_MAP[self.adstock](data, *adstock_prior), dims=dims)
+            return pm.Deterministic(f"{self.variable_name}_adstock", ADSTOCK_MAP[self.adstock](data, alpha=adstock_prior[0], theta=adstock_prior[1], normalize=True, axis=-1), dims=dims)
 
     def apply_shape_transform(self, data, dims=None, model=None):
         model = pm.modelcontext(model)
@@ -298,7 +299,8 @@ class MediaVariableDetails(VariableDetails):
             dims = var_dims()
             transformed_variable = self.register_variable(data)
             media_transformed = self.apply_shape_transform(transformed_variable, dims=dims)
-            contributions = pm.Deterministic(f"{self.variable_name}_contribution", estimate[...,None]*media_transformed, dims=dims)
+            ad_stocked = self.apply_adstock(media_transformed, dims=dims)
+            contributions = pm.Deterministic(f"{self.variable_name}_contribution", estimate[...,None]*ad_stocked, dims=dims)
         return contributions  
 
 class ExogVariableDetails(VariableDetails):
@@ -337,7 +339,95 @@ class ExogVariableDetails(VariableDetails):
             #var = pm.Deterministic(f"{self.variable_name}_transformed", self.transform(var), dims=dims)
         return var
     def get_observation(self, data, model=None):
+        
         model = pm.modelcontext(model)
         with model:
             return self.register_variable(data)
         
+class LocalTrendsVariableDetails(VariableDetails):
+    variable_type: Literal['localtrend'] = 'localtrend'
+    num_knots: int = 6 # Assuming 3 years of data ~1 knot every 6 months
+    order: int = 3 # Cubic Splines as default
+    random_coeff_dims: Optional[list[str]] = None
+    llt_prior: LocalTrendPrior = LocalTrendPrior()
+    grouping_map: Optional[dict[str, list[str]]] = None
+    grouping_name: Optional[str] = None
+
+    def register_variable(self, data: MFF | np.ndarray, model=None):
+        spline_mat = spline_matrix(data.data, 'Period', n_knots=self.num_knots, order=self.order)
+        model = pm.modelcontext(model)
+        self.__n_splines = spline_mat.shape[1]
+        model.add_coord(f"{self.variable_name}_splines", np.arange(self.__n_splines))
+        with model:
+            variable = pm.Data(f"{self.variable_name}_spline_matrix", spline_mat, dims=("Period", f"{self.variable_name}_splines"))
+        return variable
+
+    def build_coeff_prior(self, n_splines:int, model: pm.Model | None = None):
+        
+        betas = self.llt_prior.build(
+            self.variable_name, n_splines=n_splines, random_dims=self.random_coeff_dims,
+            grouping_map=self.grouping_map, grouping_name=self.grouping_name
+            )
+        
+        return betas
+    
+    def get_contributions(self, data: MFF, model=None):
+        
+        model = pm.modelcontext(model)
+        with model:
+           
+            #media_priors = self.build_media_priors()
+            dims = var_dims()
+            transformed_variable = self.register_variable(data)
+            betas = self.build_coeff_prior(n_splines=self.__n_splines)
+            
+            contributions = pm.Deterministic(f"{self.variable_name}_contribution", betas @ transformed_variable.T , dims=(*self.random_coeff_dims, "Period"))
+        return contributions  
+    
+class SeasonVariableDetails(VariableDetails):
+    variable_type: Literal['season'] = 'season'
+    n_fourier: Optional[int] = 5
+    period: Optional[PositiveFloat] = 365.25/7
+    coeff_prior:  Optional[SeasonPrior] = SeasonPrior(type="Season")
+    fixed_ind_coeff_dims: Optional[list[str]] = None
+    random_coeff_dims: Optional[list[str]] = None
+    partial_pooling_sigma: Optional[PositiveFloat] = 1
+
+    def __fourier_components(self, mff: MFF)->pd.DataFrame:
+        n_time_steps = len(mff.data.Period.unique())
+        t = np.linspace(0, 2*np.pi*n_time_steps/self.period, n_time_steps)
+        comps = {}
+        for freq in range(1, self.n_fourier+1):
+            for comp in ['cos', 'sin']:
+                comps |= {f"{comp}_{freq}": getattr(np, comp)(t*freq)}
+        
+        return pd.DataFrame(comps).values
+    
+    
+    def register_variable(self, data: MFF | np.ndarray, model=None):
+        """Add the variable to the model"""
+
+        variable = self.__fourier_components(data)
+        
+        model = pm.modelcontext(model)
+        model.add_coord(self.variable_name, np.arange(2*self.n_fourier))
+        with model:
+        
+            var = pm.Data(f"{self.variable_name}_data", variable, dims=["Period", self.variable_name])
+            var = pm.Deterministic(f"{self.variable_name}_transformed", self.transform(var.T), dims=[self.variable_name, "Period"])
+
+        return var
+    
+    def build_coeff_prior(self, model: pm.Model | None = None):
+        model = pm.modelcontext(model)
+        return self.coeff_prior.build(self.variable_name, self.n_fourier*2, random_dims=self.random_coeff_dims, fixed_dims=self.fixed_ind_coeff_dims, pooling_sigma=self.partial_pooling_sigma, model=model)
+
+    def get_contributions(self, data: MFF, model=None):
+        
+        model = pm.modelcontext(model)
+        variable = self.register_variable(data, model=model)
+        coeffs = self.build_coeff_prior(model=model)
+        with model:
+            dims = var_dims()
+            contributions = pm.Deterministic(f"{self.variable_name}_contribution", coeffs @ variable, dims=dims)
+        return contributions
