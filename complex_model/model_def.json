@@ -50,6 +50,7 @@
       },
       "fixed_ind_coeff_dims": null,
       "random_coeff_dims": null,
+      "index_to": "median",
       "media_transform_prior": {
         "type": "Hill",
         "K_ave": 0.85,

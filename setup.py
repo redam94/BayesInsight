@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='foottraffic',
+    name='bayesinsight',
     version='0.1.0',
-    packages=find_packages(include=['foottraffic', 'foottraffic.*'])
+    packages=find_packages(include=['bayesinsight', 'bayesinsight.*'])
 )
