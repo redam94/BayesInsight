@@ -9,8 +9,9 @@ from bayesinsight.models.likelihood import Likelihood
 from bayesinsight.types.likelihood_types import LikelihoodType
 from bayesinsight.models.dataloading import MFF
 from bayesinsight.lib.constants import MFFCOLUMNS, TRANSFOMER_MAP, MEDIA_TRANSFORM_MAP, ADSTOCK_MAP
-from bayesinsight.lib.utils import var_dims, spline_matrix
-
+from bayesinsight.lib.utils import (
+    var_dims, spline_matrix, row_ids_to_ind_map, 
+    var_dims, enforce_dim_order, check_coord, check_dim)
 
 from typing import Optional, Union, Literal, Annotated
 
@@ -197,8 +198,8 @@ class VariableDetails(BaseModel):
 class ControlVariableDetails(VariableDetails):
     variable_type: Literal['control'] = 'control'
     coeff_prior: ControlCoeffPrior = ControlCoeffPrior()
-    fixed_ind_coeff_dims: Optional[list[str]] = None
-    random_coeff_dims: Optional[list[str]] = None    
+    fixed_ind_coeff_dims: Optional[list[str]] = Field(default_factory= lambda: [])
+    random_coeff_dims: Optional[list[str]] = Field(default_factory= lambda: []) 
 
     @model_validator(mode="after")
     def validate_effects(self):
@@ -370,7 +371,7 @@ class LocalTrendsVariableDetails(VariableDetails):
     variable_type: Literal['localtrend'] = 'localtrend'
     num_knots: int = 6 # Assuming 3 years of data ~1 knot every 6 months
     order: int = 3 # Cubic Splines as default
-    random_coeff_dims: Optional[list[str]] = None
+    random_coeff_dims: Optional[list[str]] = Field(default_factory= lambda: [])
     llt_prior: LocalTrendPrior = LocalTrendPrior()
     grouping_map: Optional[dict[str, list[str]]] = None
     grouping_name: Optional[str] = None
@@ -396,6 +397,16 @@ class LocalTrendsVariableDetails(VariableDetails):
     def get_contributions(self, data: MFF, model=None):
         
         model = pm.modelcontext(model)
+        
+        index_map = row_ids_to_ind_map(enforce_dim_order(list(model.coords.keys())))
+        model_dims = {col: len(model.coords[col]) for col in index_map.keys() if check_dim(col, None)}
+        
+        random_coeff_dims = enforce_dim_order(self.random_coeff_dims)
+        
+        random_dims_project = dict(
+            repeats=tuple([model_dims[col] for col, index in index_map.items() if check_dim(col, None)]),
+            axis=tuple([index for col, index in index_map.items() if check_dim(col, random_coeff_dims)])
+        )
         with model:
            
             #media_priors = self.build_media_priors()
@@ -403,7 +414,17 @@ class LocalTrendsVariableDetails(VariableDetails):
             transformed_variable = self.register_variable(data)
             betas = self.build_coeff_prior(n_splines=self.__n_splines)
             
-            contributions = pm.Deterministic(f"{self.variable_name}_contribution", betas @ transformed_variable.T , dims=(*self.random_coeff_dims, "Period"))
+        
+            
+            contributions_ = betas @ transformed_variable.T
+            expanded_random = pt.expand_dims(contributions_, axis=random_dims_project['axis'])
+            repeats_random = np.ones(shape=random_dims_project['repeats'])
+            contributions = pm.Deterministic(
+                f"{self.variable_name}_contribution", 
+                expanded_random*repeats_random[...,None], 
+                dims=(*tuple(model_dims.keys()), "Period"))
+
+        
         return contributions  
     
 class SeasonVariableDetails(VariableDetails):

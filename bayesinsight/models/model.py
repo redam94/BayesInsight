@@ -93,8 +93,9 @@ class BayesInsightModel(BaseModel):
                 contributions_ = var.get_contributions(data)
                 contributions = contributions + contributions_
             
-            if exog_variable.likelihood.type == 'Normal':
+            if exog_variable.likelihood.type == 'Normal' or exog_variable.likelihood.type == 'LogNormal':
                 mu = pm.Deterministic('mu', contributions, dims=var_dim)
+                
             else:
                 mu = pm.Deterministic('mu', pm.math.exp(pt.clip(contributions, -20, 20)), dims=var_dim)
             like = exog_variable.build_likelihood(mu, exog_variable.get_observation(data))
@@ -236,11 +237,11 @@ class BayesInsightModel(BaseModel):
         posterior = self.get_posterior_predictive()
         return az.plot_ppc(posterior, kind=kind, coords=coords)
 
-    def get_contributions(self)->pd.DataFrame:
+    def get_contributions(self, trace: Optional[xr.Dataset] = None)->pd.DataFrame:
         row_ids = list(self.data.metadata.row_ids)
         contributions = self.data.analytic_dataframe()[row_ids]
 
-        if not self.fitted:
+        if not self.fitted and trace is None:
             raise ValueError("Model must be fitted first")
         
         media_variables = self.return_media_variables()
@@ -256,27 +257,36 @@ class BayesInsightModel(BaseModel):
         for media_variable in media_variables:
             var_names.append(media_variable.variable_name)
         
+        for trend_variable in trend_variables:
+            var_names.append(trend_variable.variable_name)
+        for season_variable in season_variables:
+            var_names.append(season_variable.variable_name)
+            
         for var in var_names:
-            contributions = contributions.merge(self.get_var_con(var), on=row_ids)
+            contributions = contributions.merge(self.get_var_con(var, trace=trace), on=row_ids)
 
-        for trend in trend_variables:
-            if season_variables:
-                trace = np.exp(
-                    self.trace.posterior[f"{season_variables[0].variable_name}_contribution"] 
-                    + self.trace.posterior[f"{trend.variable_name}_contribution"] 
-                    + self.trace.posterior["intercept_contribution"]
-                    ).mean(dim=("chain", "draw")).to_dataframe(trend.variable_name).reset_index()
-            else:
-                trace = np.exp(
-                    self.trace.posterior[f"{trend.variable_name}_contribution"] 
-                    + self.trace.posterior["intercept_contribution"]
-                ).mean(dim=("chain", "draw")).to_dataframe(trend.variable_name).reset_index()
-            contributions = contributions.merge(trace, on=row_ids)
-        for season in season_variables:
-            trace = self.trace.posterior[f"{season.variable_name}_contribution"].mean(dim=("chain", "draw")).to_dataframe(season.variable_name).reset_index()
-            contributions = contributions.merge(trace, on=row_ids)
+        #if trace is None:
+        #    trace = self.trace.posterior
+            
+        #for trend in trend_variables:
+        #    if season_variables:
+        #        trend_trace = (
+        #            trace[f"{season_variables[0].variable_name}_contribution"] 
+        #            + trace[f"{trend.variable_name}_contribution"] 
+        #            + trace["intercept_contribution"]
+        #            ).mean(dim=("chain", "draw")).to_dataframe(trend.variable_name).reset_index()
+        #    else:
+        #        trend_trace = (
+        #            trace[f"{trend.variable_name}_contribution"] 
+        #            + trace["intercept_contribution"]
+        #        ).mean(dim=("chain", "draw")).to_dataframe(trend.variable_name).reset_index()
+        #    contributions = contributions.merge(trend_trace, on=row_ids)
+        #for season in season_variables:
+        #    season_trace = trace[f"{season.variable_name}_contribution"].mean(dim=("chain", "draw")).to_dataframe(season.variable_name).reset_index()
+        #    contributions = contributions.merge(season_trace, on=row_ids)
         return contributions
-        
+    
+    
     def get_posterior_predictive(self):
         with self.build():
             posterior = pm.sample_posterior_predictive(self.trace)
@@ -299,8 +309,9 @@ class BayesInsightModel(BaseModel):
 
         return af.merge(mu_df, on=list(self.data.metadata.row_ids))
     
-    def get_var_con(self, varname:str, agg='mean'):
-        trace = self.trace.posterior[f'{varname}_contribution']
+    def get_var_con(self, varname:str, trace: Optional[xr.Dataset] = None, agg = 'mean'):
+        if trace is None:
+            trace = self.trace.posterior[f'{varname}_contribution']
 
         mean_trace = trace.to_dataframe().reset_index()
         groupby_cols = [col for col in mean_trace.columns if (col not in ['chain', 'draw']) and (col in MFFCOLUMNS)]
@@ -315,6 +326,7 @@ class BayesInsightModel(BaseModel):
             raise ValueError("Model must be fitted first")
         
         posterior = self.trace.posterior.sel(**subset)
+        
         with self.build():
             if not data is None:
                 pm.set_data(data)

@@ -1,23 +1,44 @@
 {
   "variable_details": [
     {
+      "variable_name": "LLT",
+      "variable_type": "localtrend",
+      "deterministic_transform": {
+        "functional_form": "linear",
+        "params": null
+      },
+      "normalization": "none",
+      "random_coeff_dims": [
+        "Geography",
+        "Product"
+      ]
+    },
+    {
+      "variable_name": "annual_seasonality",
+      "variable_type": "season",
+      "random_coeff_dims": [
+        "Geography",
+        "Product"
+      ]
+    },
+    {
       "variable_name": "Promotion_Total_Total_Total",
       "variable_type": "control",
       "deterministic_transform": {
         "functional_form": "linear",
         "params": null
       },
-      "normalization": "none",
+      "normalization": "Global Standardize",
       "std": null,
       "mean": null,
       "time_transform": null,
       "sign": null,
-      "partial_pooling_sigma": 1.0,
+      "partial_pooling_sigma": 0.1,
       "coeff_prior": {
         "coeff_dist": "Normal",
         "coeff_params": {
           "mu": 0.0,
-          "sigma": 3.0
+          "sigma": 0.5
         }
       },
       "fixed_ind_coeff_dims": null,
@@ -38,7 +59,7 @@
       "mean": null,
       "time_transform": null,
       "sign": "positive",
-      "partial_pooling_sigma": 1.0,
+      "partial_pooling_sigma": 0.1,
       "adstock": "delayed",
       "media_transform": "hill",
       "coeff_prior": {
@@ -78,20 +99,21 @@
       "mean": null,
       "time_transform": null,
       "sign": null,
-      "partial_pooling_sigma": 1.0,
+      "partial_pooling_sigma": 0.5,
       "intercept_prior": {
         "coeff_dist": "Normal",
         "coeff_params": {
           "mu": 0.0,
-          "sigma": 3.0
+          "sigma": 1.0
         }
       },
       "fixed_ind_coeff_dims": null,
       "random_coeff_dims": [
-        "Geography"
+        "Geography",
+        "Product"
       ],
       "likelihood": {
-        "type": "Poisson"
+        "type": "NegativeBinomial"
       }
     }
   ],
