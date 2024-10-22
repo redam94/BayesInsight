@@ -16,6 +16,11 @@ def power(x, alpha: float):
 def log(x):
     return np.log(x)
 
+def saturation(x, alpha, beta, maxper, max):
+    beta = beta/1e8
+    return beta**(alpha**(x/(maxper*max)*100**2))
+    
+
 def hill(x, K, n, mean=None):
     if mean is None:
         mean = x.mean(axis=-1)
