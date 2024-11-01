@@ -1,0 +1,59 @@
+brand_name: "Cartier"
+
+models:
+
+  commstracker: 
+    type: AWB
+    model_location: "./models/commstracker" # Location for model details, model contributions, and avm
+    norm_type: 'DIV'
+    is_mult: False
+    dims: 
+      - Period
+
+  foottraffic:
+    type: BayesInsight
+    model_location: "./models/FinalFootTrafficModel-2024"
+    is_mult: True
+    dims:
+      - Period
+      - Geography
+  
+  sales:
+    type: AWB
+    model_location: "./models/sales"
+    norm_type: "SUB"
+    is_mult: True
+    dims:
+      - Period
+      - Geography
+
+model_hierarchy:
+  commstracker: # commstracker output feeds into foottraffic and sales model 
+    - foottraffic
+    - sales
+  foottraffic: # foottraffic output feeds into sales model
+    - sales
+
+start_period: "2022-04-01"
+end_period: "2023-04-01"
+
+varnames:
+  commstracker:
+    olv: 
+      - OLV_IMPRESSIONS_TOTAL_TOTAL_TOTAL_TOTAL_SPLIT_1
+      - OLV_IMPRESSIONS_TOTAL_TOTAL_TOTAL_TOTAL_SPLIT_2
+  foottraffic:
+    olv:
+      - OLV_Impressions_agg_product_campaign_Total_Total_Total_Total
+
+current_budget:
+  olv: 120000
+  display: 100000
+
+current_cpm:
+  olv: 1.20
+  display: 1.4
+
+current_cpc:
+  search: 1.2
+

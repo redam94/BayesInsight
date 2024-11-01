@@ -9,4 +9,4 @@ first_ft_model.ipynb
 !complex_model/data/*.json
 !complex_model/*.json
 build
-foottraffic.egg-info
+*.egg-info
