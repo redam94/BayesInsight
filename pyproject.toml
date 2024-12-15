@@ -4,3 +4,11 @@ version = "0.1.0"
 description = "Bayesian model for flexible and interpretable insights"
 readme = "README.md"
 requires-python = ">=3.11"
+dependencies = [
+    "pydantic",
+    "pandas",
+    "numpy",
+    "pymc",
+    "arviz",
+    "xarray"
+]

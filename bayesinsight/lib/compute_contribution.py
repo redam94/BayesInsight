@@ -17,7 +17,6 @@ def compute_model_contributions(
 
     for variable in variable_details:
         var_name = variable.var_name
-        contribution_name = f"{var_name}_contribution"
         variable_contributions[variable.variable_name] = posterior[var_name].mean(
             dim=("chain", "draw")
         )

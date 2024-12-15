@@ -130,9 +130,7 @@ class BayesInsightModel(BaseModel):
                 mu = pm.Deterministic(
                     "mu", pm.math.exp(pt.clip(contributions, -20, 20)), dims=var_dim
                 )
-            like = exog_variable.build_likelihood(
-                mu, exog_variable.get_observation(data)
-            )
+            exog_variable.build_likelihood(mu, exog_variable.get_observation(data))
 
         self.__model = model
 
@@ -204,7 +202,7 @@ class BayesInsightModel(BaseModel):
     def check_prior(self, varname):
         variable = self.get_variable(varname)
         coords = self.get_coords()
-        with pm.Model(coords=coords) as model:
+        with pm.Model(coords=coords):
             coeff_prior = variable.build_coeff_prior()
 
         coeff_draws = pm.draw(coeff_prior, 4000).reshape((4, 1000, -1))
@@ -216,7 +214,7 @@ class BayesInsightModel(BaseModel):
     def check_media_transform_prior(self, varname):
         media_variable = self.get_variable(varname)
         coords = self.get_coords()
-        with pm.Model(coords=coords) as model:
+        with pm.Model(coords=coords):
             media_prior = media_variable.build_media_priors()
 
         for i, var in enumerate(pm.draw(media_prior, 4000)):
