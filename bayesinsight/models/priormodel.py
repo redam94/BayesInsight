@@ -13,6 +13,20 @@ import pytensor.tensor as pt
 
 from typing import Dict, Literal, Optional, Union, List
 
+__all__ = [
+    "Prior",
+    "CoeffPrior",
+    "MediaCoeffPrior",
+    "ControlCoeffPrior",
+    "DelayedAdStockPrior",
+    "HillPrior",
+    "SShapedPrior",
+    "InterceptPrior",
+    "LocalTrendPrior",
+    "EventPrior",
+    "SeasonPrior",
+]
+
 
 class Prior(BaseModel):
     def build(self, varname, model=None, **kwargs):
@@ -249,7 +263,7 @@ class LocalTrendPrior(Prior):
             )
 
         with model:
-            with pm.Model(name=f"LLT_{var_name}", coords=coords) as spline_model:
+            with pm.Model(name=f"LLT_{var_name}", coords=coords):
                 if random_dims is None:
                     tau = pm.HalfCauchy("tau", self.variability)
                     trends_betas = pm.GaussianRandomWalk(

@@ -1,5 +1,7 @@
 from bayesinsight import BayesInsightModel
 
+__all__ = ["compute_model_contributions"]
+
 
 def compute_model_contributions(
     model: BayesInsightModel,

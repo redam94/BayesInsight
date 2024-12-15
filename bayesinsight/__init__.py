@@ -1,3 +1,3 @@
-from bayesinsight.models.model import BayesInsightModel
-from bayesinsight.models import priormodel, transformsmodel, variablemodels
-from bayesinsight.models.dataloading import MFF
+from bayesinsight.models.model import BayesInsightModel as BayesInsightModel
+# from bayesinsight.models import *
+# from bayesinsight.models.dataloading import *

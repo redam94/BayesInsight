@@ -19,6 +19,8 @@ import numpy as np
 from bayesinsight.types.dataloading_types import INDEXCOL
 from bayesinsight.lib.constants import MFFCOLUMNS
 
+__all__ = ["MFF", "MetaData"]
+
 
 class MetaData(BaseModel):
     allowed_geos: Optional[Set[str]] = None

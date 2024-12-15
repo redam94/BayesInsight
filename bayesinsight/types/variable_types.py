@@ -1,5 +1,7 @@
 from enum import StrEnum
 
+__all__ = ["VarType"]
+
 
 class VarType(StrEnum):
     exog = "exog"

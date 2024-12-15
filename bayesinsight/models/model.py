@@ -35,6 +35,8 @@ Variable = Annotated[
     Field(discriminator="variable_type"),
 ]
 
+__all__ = ["BayesInsightModel"]
+
 
 class BayesInsightModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)

@@ -8,6 +8,17 @@ import xarray as xr
 
 from bayesinsight.lib.constants import MFFCOLUMNS
 
+__all__ = [
+    "row_ids_to_ind_map",
+    "check_coord",
+    "check_dim",
+    "enforce_dim_order",
+    "var_dims",
+    "spline_matrix",
+    "sum_over_vars",
+    "calculate_mult_contributions",
+]
+
 
 def row_ids_to_ind_map(row_ids: list[str]) -> list[int]:
     ind_map = {row_ids[i]: i for i in range(len(row_ids))}

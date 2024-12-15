@@ -5,6 +5,8 @@ from bayesinsight.lib.utils import var_dims
 from pydantic import BaseModel
 import pymc as pm
 
+__all__ = ["Likelihood"]
+
 
 def requires_dispersion(likelihood: LikelihoodType):
     return likelihood in ["NegativeBinomial", "ZeroInflatedNegativeBinomial"]

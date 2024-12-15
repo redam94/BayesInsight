@@ -1,5 +1,7 @@
 from enum import StrEnum
 
+__all__ = ["LikelihoodType"]
+
 
 class LikelihoodType(StrEnum):
     poisson = "Poisson"  # Good choice for count data

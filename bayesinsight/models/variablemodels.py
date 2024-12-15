@@ -1,7 +1,6 @@
-from bayesinsight.types.transform_types import MediaTransform, Adstock
+from bayesinsight.types.transform_types import MediaTransform, Adstock, Normilization
 from bayesinsight.models.transformsmodel import (
     DeterministicTransform,
-    Normilization,
     TimeTransformer,
 )
 from bayesinsight.models.priormodel import (
@@ -34,6 +33,15 @@ import pandas as pd
 import pymc as pm
 import pytensor.tensor as pt
 import xarray as xr
+
+__all__ = [
+    "VariableDetails",
+    "ControlVariableDetails",
+    "MediaVariableDetails",
+    "ExogVariableDetails",
+    "LocalTrendsVariableDetails",
+    "SeasonVariableDetails",
+]
 
 
 def _row_ids_to_ind_map(row_ids: list[str]) -> list[int]:
@@ -168,7 +176,10 @@ class VariableDetails(BaseModel):
     def enforce_sign(self, model=None):
         """Enforce the sign of the coefficients"""
         model = pm.modelcontext(model)
-        pot = lambda constraint: (pm.math.log(pm.math.switch(constraint, 1, 1e-10)))
+
+        def pot(constraint):
+            return pm.math.log(pm.math.switch(constraint, 1, 1e-10))
+
         with model:
             if self.sign is None:
                 return model
@@ -488,7 +499,7 @@ class LocalTrendsVariableDetails(VariableDetails):
         )
         with model:
             # media_priors = self.build_media_priors()
-            dims = var_dims()
+
             transformed_variable = self.register_variable(data)
             betas = self.build_coeff_prior(n_splines=self.__n_splines)
 
