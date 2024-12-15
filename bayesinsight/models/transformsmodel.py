@@ -2,15 +2,15 @@ from typing import Dict, Optional
 
 from pydantic import BaseModel, model_validator
 
-from bayesinsight.types.transform_types import FunctionalForms, Normilization, TimeTransforms
+from bayesinsight.types.transform_types import FunctionalForms, TimeTransforms
 from bayesinsight.lib.constants import TRANSFOMER_MAP
+
 
 class DeterministicTransform(BaseModel):
     functional_form: FunctionalForms = FunctionalForms.linear
     params: Optional[Dict[str, float]] = None
 
-    
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def params_defined(self):
         annotations = TRANSFOMER_MAP[self.functional_form].__annotations__
 
@@ -39,8 +39,11 @@ class DeterministicTransform(BaseModel):
                 return TRANSFOMER_MAP[self.functional_form](value)
             return TRANSFOMER_MAP[self.functional_form](value, **self.params)
         except KeyError:
-            raise NotImplementedError(f"{self.functional_form} not implemented yet sorry.")
-        
+            raise NotImplementedError(
+                f"{self.functional_form} not implemented yet sorry."
+            )
+
+
 class TimeTransformer(BaseModel):
     transform_type: Optional[TimeTransforms] = None
 

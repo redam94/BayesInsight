@@ -1,12 +1,7 @@
 """File contains constants used throughout the project"""
-from bayesinsight.lib.transforms import (
-    log, linear, exp,
-    indexp, power, 
-    hill
-)
-from bayesinsight.lib.adstock import (
-  delayed_adstock, weibull_adstock
-)
+
+from bayesinsight.lib.transforms import log, linear, exp, indexp, power, hill
+from bayesinsight.lib.adstock import delayed_adstock, weibull_adstock
 from bayesinsight.types.transform_types import FunctionalForms, MediaTransform, Adstock
 
 
@@ -18,7 +13,7 @@ MFFCOLUMNS = [
     "Campaign",
     "Creative",
     "VariableValue",
-    "VariableName"
+    "VariableName",
 ]
 
 TRANSFOMER_MAP = {
@@ -26,15 +21,9 @@ TRANSFOMER_MAP = {
     FunctionalForms.linear: linear,
     FunctionalForms.log: log,
     FunctionalForms.indexp: indexp,
-    FunctionalForms.power: power
+    FunctionalForms.power: power,
 }
 
-ADSTOCK_MAP = {
-  Adstock.delayed: delayed_adstock,
-  Adstock.weibull: weibull_adstock
-}
+ADSTOCK_MAP = {Adstock.delayed: delayed_adstock, Adstock.weibull: weibull_adstock}
 
-MEDIA_TRANSFORM_MAP = {
-  MediaTransform.hill: hill,
-  MediaTransform.linear: linear
-}
+MEDIA_TRANSFORM_MAP = {MediaTransform.hill: hill, MediaTransform.linear: linear}

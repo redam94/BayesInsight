@@ -5,8 +5,8 @@ from nicegui import ui
 
 
 def create() -> None:
-    @ui.page('/a')
+    @ui.page("/a")
     def page_a():
         with theme.frame():
-            message('Page A')
-            ui.label('This page is defined in a function.')
+            message("Page A")
+            ui.label("This page is defined in a function.")

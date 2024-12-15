@@ -1,18 +1,19 @@
 """
-Transforms from PYMC marketing 
+Transforms from PYMC marketing
 https://github.com/pymc-labs/pymc-marketing/blob/main/pymc_marketing/mmm/transformers.py
 """
+
 import pytensor.tensor as pt
 import pymc as pm
-import jax.numpy as jnp
-import jax
-from enum import Enum, StrEnum
+from enum import StrEnum
 from pytensor.tensor.random.utils import params_broadcast_shapes
+
 
 class ConvMode(StrEnum):
     After = "After"
     Before = "Before"
     Overlap = "Overlap"
+
 
 class WeibullType(StrEnum):
     # TODO: use StrEnum when we upgrade to python 3.11
@@ -134,22 +135,21 @@ def batched_convolution(
     # Move the "time" axis back to where it was in the original x array
     return pt.moveaxis(conv, -1, axis + conv.ndim - orig_ndim)
 
+
 def delayed_adstock_weights(
-        alpha: float=0.0, 
-        theta: int = 0,
-        l_max: int = 12, 
-        dtype: type = float, 
-        normalize: bool=True):
-    
+    alpha: float = 0.0,
+    theta: int = 0,
+    l_max: int = 12,
+    dtype: type = float,
+    normalize: bool = True,
+):
     w = pt.power(
         pt.as_tensor(alpha)[..., None],
         (pt.arange(l_max, dtype=dtype) - pt.as_tensor(theta)[..., None]) ** 2,
     )
     return w / pt.sum(w, axis=-1, keepdims=True) if normalize else w
 
-   
 
-  
 def delayed_adstock(
     x,
     alpha: float = 0.0,
@@ -226,9 +226,12 @@ def delayed_adstock(
     .. [1] Jin, Yuxue, et al. "Bayesian methods for media mix modeling
        with carryover and shape effects." (2017).
     """
-    w = delayed_adstock_weights(alpha=alpha, theta=theta, l_max=l_max, dtype=x.dtype, normalize=normalize)
+    w = delayed_adstock_weights(
+        alpha=alpha, theta=theta, l_max=l_max, dtype=x.dtype, normalize=normalize
+    )
     return batched_convolution(x, w, axis=axis, mode=mode)
-  
+
+
 def weibull_adstock(
     x,
     lam=1,
