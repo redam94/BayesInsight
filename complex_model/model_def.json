@@ -9,16 +9,12 @@
       },
       "normalization": "none",
       "random_coeff_dims": [
-        "Geography",
-        "Product"
       ]
     },
     {
       "variable_name": "annual_seasonality",
       "variable_type": "season",
       "random_coeff_dims": [
-        "Geography",
-        "Product"
       ]
     },
     {

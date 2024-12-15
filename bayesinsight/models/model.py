@@ -192,14 +192,14 @@ class BayesInsightModel(BaseModel):
                 trend_vars.append(var)
         return trend_vars
 
-    def get_coords(self):
+    def get_coords(self) -> dict[str, np.ndarray]:
         meta_data = self.data.metadata
         af = self.data.analytic_dataframe()
         row_ids = list(meta_data.row_ids)  # .copy()
         coords = {col: af[col].unique() for col in row_ids}
         return coords
 
-    def check_prior(self, varname):
+    def check_prior(self, varname) -> plt.axes:
         variable = self.get_variable(varname)
         coords = self.get_coords()
         with pm.Model(coords=coords):

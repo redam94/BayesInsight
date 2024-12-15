@@ -12,3 +12,6 @@ dependencies = [
     "arviz",
     "xarray"
 ]
+
+[tool.ruff]
+target-version = "py311"
