@@ -1,7 +1,7 @@
 from enum import StrEnum
 
 __all__ = [
-    "Normilization",
+    "Normalization",
     "FunctionalForms",
     "TimeTransforms",
     "Adstock",
@@ -11,7 +11,7 @@ __all__ = [
 INDEXED_TRANSFORMS = []
 
 
-class Normilization(StrEnum):
+class Normalization(StrEnum):
     # Grouped Normilization Not Implemented
     # around1 = 'around1'
     # around0 = 'around0'
