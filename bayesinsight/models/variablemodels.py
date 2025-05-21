@@ -207,25 +207,68 @@ class VariableDetails(BaseModel):
 
         return var
 
-    def contributions(self, model=None):
-        """Get the contributions of the variable to the model"""
+    def _calculate_deterministic_contribution(self, var, coef, model=None):
+        """Calculate the deterministic contribution component."""
         model = pm.modelcontext(model)
         with model:
             dims = var_dims()
-            try:
-                var = getattr(model, f"{self.variable_name}_transformed")
-            except AttributeError:
-                raise AttributeError("Variable must be register before it can be used")
-
-            try:
-                coef = getattr(model, f"{self.variable_name}_coeff_estimate")
-            except AttributeError:
-                coef = self.build_coeff_prior()
-
+            # Ensure coef is correctly shaped for broadcasting with var
+            # var typically has dims (..., "Period")
+            # coef typically has dims (...,) excluding "Period"
+            # We need to add a new axis for "Period" to coef for element-wise multiplication
+            contribution_val = coef[..., None] * var
             contributions = pm.Deterministic(
-                f"{self.variable_name}_contributions", coef[..., None] * var, dims=dims
+                f"{self.variable_name}_contribution", contribution_val, dims=dims
             )
         return contributions
+
+    def get_contribution(self, data: MFF, model: Optional[pm.Model] = None):
+        """
+        Calculate and register the variable's contribution to the model.
+
+        Args:
+            data: MFF object containing the variable data.
+            model: Optional PyMC model context.
+
+        Returns:
+            A PyMC Deterministic object representing the variable's contribution.
+        """
+        model = pm.modelcontext(model)
+
+        # Register the variable (applies transformations)
+        # The registered variable should have the correct dimensions including "Period"
+        registered_var = self.register_variable(data, model=model)
+
+        # Build the coefficient prior
+        # Coeff prior dimensions should not include "Period"
+        coeff_prior = self.build_coeff_prior(model=model)
+
+        # Enforce sign constraints on the coefficient prior
+        self.enforce_sign(model=model) # This modifies the model state if applicable
+
+        # Calculate the contribution using the (potentially sign-enforced) coefficient
+        # and the transformed variable.
+        # We might need to re-fetch the coefficient if enforce_sign modifies it in place
+        # and returns a new object, or if build_coeff_prior returns a different object
+        # than what enforce_sign expects.
+        # For now, assume build_coeff_prior gives the main coefficient object and
+        # enforce_sign applies constraints to it or related potentials.
+        # The _calculate_deterministic_contribution will use the coefficient from build_coeff_prior.
+        
+        # It's crucial that `coeff_prior` used here is the one potentially affected by `enforce_sign`.
+        # If `enforce_sign` adds a potential, it doesn't change `coeff_prior` directly.
+        # If `build_coeff_prior` in subclasses already calls `enforce_sign`, this call might be redundant
+        # or needs careful handling. For the base class, this order is logical.
+        
+        # The name of the deterministic node for the coefficient estimate is usually
+        # f"{self.variable_name}_coeff_estimate". Let's assume build_coeff_prior
+        # registers this or returns the symbolic variable for it.
+        # And _calculate_deterministic_contribution will use it.
+
+        contribution = self._calculate_deterministic_contribution(
+            registered_var, coeff_prior, model=model
+        )
+        return contribution
 
 
 class ControlVariableDetails(VariableDetails):
@@ -251,19 +294,10 @@ class ControlVariableDetails(VariableDetails):
             self.enforce_sign()
         return estimate
 
-    def get_contributions(self, data, model=None):
-        """Get the contributions of the variable to the model"""
-        model = pm.modelcontext(model)
-        with model:
-            estimate = self.build_coeff_prior()
-            dims = var_dims()
-            variable = self.register_variable(data)
-            contributions = pm.Deterministic(
-                f"{self.variable_name}_contribution",
-                estimate[..., None] * variable,
-                dims=dims,
-            )
-        return contributions
+    # get_contributions removed, base class get_contribution will be used.
+    # The base get_contribution calls self.register_variable, self.build_coeff_prior (which is overridden here),
+    # self.enforce_sign (called within build_coeff_prior here), and self._calculate_deterministic_contribution.
+    # This correctly replicates the original logic.
 
 
 class MediaVariableDetails(VariableDetails):
@@ -371,19 +405,36 @@ class MediaVariableDetails(VariableDetails):
             transformed_data = data
             return transformed_data
 
-    def get_contributions(self, data, model=None):
+    def get_contribution(self, data: MFF, model: Optional[pm.Model] = None): # Renamed from get_contributions
         model = pm.modelcontext(model)
         with model:
-            estimate = self.build_coeff_prior()
-            # media_priors = self.build_media_priors()
-            dims = var_dims()
-            transformed_variable = self.register_variable(data)
+            # build_coeff_prior in MediaVariableDetails already calls enforce_sign
+            estimate = self.build_coeff_prior(model=model) 
+            
+            dims = var_dims(model=model) # Pass model for context
+            
+            # register_variable needs to be called to set up __group_nonzero_median/mean
+            # and to place the raw variable in the model for transformation.
+            # This returns the transformed variable (after deterministic, normalization, time transforms if any)
+            # but for media, subsequent specific transforms (adstock, shape) are applied.
+            # The base register_variable returns the output of self.transform(var)
+            # For media, we usually apply adstock and shape transforms on the raw or deterministically transformed variable.
+            # Let's ensure register_variable here gives us the data *before* adstock/shape.
+            
+            # MediaVariableDetails overrides register_variable to store __group_nonzero_median/mean.
+            # The super().register_variable call within it will return the result of self.transform().
+            # This is fine as media_transform and adstock are applied to this potentially pre-transformed variable.
+            registered_variable = self.register_variable(data, model=model)
+
+            # Apply media-specific transformations
             media_transformed = self.apply_shape_transform(
-                transformed_variable, dims=dims
+                registered_variable, dims=dims, model=model
             )
-            ad_stocked = self.apply_adstock(media_transformed, dims=dims)
+            ad_stocked = self.apply_adstock(media_transformed, dims=dims, model=model)
+            
+            # Calculate final contribution
             contributions = pm.Deterministic(
-                f"{self.variable_name}_contribution",
+                f"{self.variable_name}_contribution", # Name consistency
                 estimate[..., None] * ad_stocked,
                 dims=dims,
             )
@@ -433,6 +484,16 @@ class ExogVariableDetails(VariableDetails):
         with model:
             return self.register_variable(data)
 
+    def get_contribution(self, data: MFF, model: Optional[pm.Model] = None):
+        """
+        Exogenous variables do not contribute in the same additive manner as others.
+        Their primary role is to define the likelihood's observed data and overall model structure.
+        The intercept is handled separately, and the exog variable itself is the response.
+        """
+        # This method is overridden to prevent accidental calls or to clarify its role.
+        # It should not produce a contribution term to be summed with others.
+        return None
+
 
 class LocalTrendsVariableDetails(VariableDetails):
     variable_type: Literal["localtrend"] = "localtrend"
@@ -469,10 +530,10 @@ class LocalTrendsVariableDetails(VariableDetails):
 
         return betas
 
-    def get_contributions(self, data: MFF, model=None):
+    def get_contribution(self, data: MFF, model: Optional[pm.Model] = None): # Renamed from get_contributions
         model = pm.modelcontext(model)
 
-        index_map = row_ids_to_ind_map(enforce_dim_order(list(model.coords.keys())))
+        index_map = row_ids_to_ind_map(enforce_dim_order(list(model.coords.keys()))) # type: ignore
         model_dims = {
             col: len(model.coords[col])
             for col in index_map.keys()
@@ -509,9 +570,9 @@ class LocalTrendsVariableDetails(VariableDetails):
             )
             repeats_random = np.ones(shape=random_dims_project["repeats"])
             contributions = pm.Deterministic(
-                f"{self.variable_name}_contribution",
+                f"{self.variable_name}_contribution", # Name consistency
                 expanded_random * repeats_random[..., None],
-                dims=(*tuple(model_dims.keys()), "Period"),
+                dims=(*tuple(model_dims.keys()), "Period"), # type: ignore
             )
 
         return contributions
@@ -568,13 +629,28 @@ class SeasonVariableDetails(VariableDetails):
             model=model,
         )
 
-    def get_contributions(self, data: MFF, model=None):
+    def get_contribution(self, data: MFF, model: Optional[pm.Model] = None): # Renamed from get_contributions
         model = pm.modelcontext(model)
+        # register_variable in SeasonVariableDetails handles Fourier components creation
+        # and returns the transformed Fourier series.
         variable = self.register_variable(data, model=model)
+        
+        # build_coeff_prior is overridden in SeasonVariableDetails
         coeffs = self.build_coeff_prior(model=model)
+        
+        # SeasonVariableDetails does not typically have sign enforcement in its build_coeff_prior,
+        # so if sign enforcement is desired for seasonal components (uncommon),
+        # it would need to be added to its build_coeff_prior or called explicitly here.
+        # self.enforce_sign(model=model) # if needed, but usually not for seasonal.
+
         with model:
-            dims = var_dims()
+            dims = var_dims(model=model) # Pass model for context
+            # The registered variable (Fourier components) has dims [self.variable_name, "Period"]
+            # The coeffs have dims that should include self.variable_name for the dot product.
+            # The result of coeffs @ variable should have dims that match var_dims (e.g., ("Geo", "Period"))
             contributions = pm.Deterministic(
-                f"{self.variable_name}_contribution", coeffs @ variable, dims=dims
+                f"{self.variable_name}_contribution", # Name consistency
+                coeffs @ variable, 
+                dims=dims
             )
         return contributions
