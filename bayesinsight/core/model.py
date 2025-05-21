@@ -1,13 +1,13 @@
-from bayesinsight.models.dataloading import MFF
-from bayesinsight.models.variablemodels import (
+from bayesinsight.data.mff import MFF
+from bayesinsight.variables.base import (
     ExogVariableDetails,
     ControlVariableDetails,
     MediaVariableDetails,
     LocalTrendsVariableDetails,
     SeasonVariableDetails,
 )
-from bayesinsight.lib.utils import var_dims
-from bayesinsight.lib.constants import MFFCOLUMNS
+from bayesinsight.utils.general import var_dims
+from bayesinsight.core.constants import MFFCOLUMNS
 
 from pydantic import BaseModel, Field, ConfigDict, DirectoryPath
 from arviz import InferenceData
