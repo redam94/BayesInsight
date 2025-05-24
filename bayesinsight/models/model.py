@@ -147,12 +147,12 @@ class BayesInsightModel(BaseModel):
                 return var
         raise ValueError(f"{varname} not in variable details")
 
-    # def return_media_variables(self) -> List[MediaVariableDetails]: # Removed
-    #     media_vars = []
-    #     for var in self.variable_details:
-    #         if var.variable_type == "media":
-    #             media_vars.append(var)
-    #     return media_vars
+    def return_media_variables(self) -> List[MediaVariableDetails]: # Removed
+        media_vars = []
+        for var in self.variable_details:
+            if var.variable_type == "media":
+                media_vars.append(var)
+        return media_vars
 
     def return_exog_variables(self) -> List[ExogVariableDetails]:
         exog_vars = []
@@ -161,26 +161,26 @@ class BayesInsightModel(BaseModel):
                 exog_vars.append(var)
         return exog_vars
 
-    # def return_control_variables(self) -> List[ControlVariableDetails]: # Removed
-    #     control_vars = []
-    #     for var in self.variable_details:
-    #         if var.variable_type == "control":
-    #             control_vars.append(var)
-    #     return control_vars
+    def return_control_variables(self) -> List[ControlVariableDetails]: # Removed
+        control_vars = []
+        for var in self.variable_details:
+            if var.variable_type == "control":
+                control_vars.append(var)
+        return control_vars
 
-    # def return_season_variables(self) -> List[SeasonVariableDetails]: # Removed
-    #     season_vars = []
-    #     for var in self.variable_details:
-    #         if var.variable_type == "season":
-    #             season_vars.append(var)
-    #     return season_vars
+    def return_season_variables(self) -> List[SeasonVariableDetails]: # Removed
+        season_vars = []
+        for var in self.variable_details:
+            if var.variable_type == "season":
+                season_vars.append(var)
+        return season_vars
 
-    # def return_trend_variables(self) -> List[LocalTrendsVariableDetails]: # Removed
-    #     trend_vars = []
-    #     for var in self.variable_details:
-    #         if var.variable_type == "localtrend":
-    #             trend_vars.append(var)
-    #     return trend_vars
+    def return_trend_variables(self) -> List[LocalTrendsVariableDetails]: # Removed
+        trend_vars = []
+        for var in self.variable_details:
+            if var.variable_type == "localtrend":
+                trend_vars.append(var)
+        return trend_vars
 
     def get_coords(self) -> dict[str, np.ndarray]:
         meta_data = self.data.metadata

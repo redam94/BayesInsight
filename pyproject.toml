@@ -1,6 +1,6 @@
 [project]
 name = "bayesinsight"
-version = "0.1.0"
+version = "0.2.0b"
 description = "Bayesian model for flexible and interpretable insights"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -10,7 +10,11 @@ dependencies = [
     "numpy",
     "pymc",
     "arviz",
-    "xarray"
+    "xarray",
+    "numpyro",
+    "jax",
+    "patsy",
+    "pymc-marketing"
 ]
 
 [tool.ruff]

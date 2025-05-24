@@ -11,3 +11,4 @@ first_ft_model.ipynb
 build
 foottraffic.egg-info
 *.egg-info
+.venv

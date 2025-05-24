@@ -82,7 +82,7 @@ class VariableDetails(BaseModel):
     mean: Optional[float] = None
     time_transform: Optional[TimeTransformer] = None
     sign: Optional[Literal["positive", "negative"]] = None
-    partial_pooling_sigma: PositiveFloat = 1
+    partial_pooling_sigma: float = 0
 
     def normalize(self, data: Union[MFF, np.ndarray]) -> np.ndarray:
         """Apply normilazation to data"""
@@ -183,11 +183,11 @@ class VariableDetails(BaseModel):
         with model:
             if self.sign is None:
                 return model
-            coeff_est = getattr(model, f"{self.variable_name}_coeff_estimate")
-            if self.sign == "positive":
-                pm.Potential(f"{self.variable_name}_positive_sign", pot(coeff_est >= 0))
-            if self.sign == "negative":
-                pm.Potential(f"{self.variable_name}_negative_sign", pot(coeff_est <= 0))
+            # coeff_est = getattr(model, f"{self.variable_name}_coeff_estimate")
+            # if self.sign == "positive":
+            #     pm.Potential(f"{self.variable_name}_positive_sign", pot(coeff_est >= 0))
+            # if self.sign == "negative":
+            #     pm.Potential(f"{self.variable_name}_negative_sign", pot(coeff_est <= 0))
         return model
 
     def register_variable(self, data: MFF | np.ndarray, model=None):
@@ -585,7 +585,7 @@ class SeasonVariableDetails(VariableDetails):
     coeff_prior: Optional[SeasonPrior] = SeasonPrior(type="Season")
     fixed_ind_coeff_dims: Optional[list[str]] = None
     random_coeff_dims: Optional[list[str]] = None
-    partial_pooling_sigma: Optional[PositiveFloat] = 1
+    partial_pooling_sigma: Optional[float] = 1
 
     def __fourier_components(self, mff: MFF) -> pd.DataFrame:
         n_time_steps = len(mff.data.Period.unique())

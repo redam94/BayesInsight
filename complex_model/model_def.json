@@ -1,19 +1,17 @@
 {
   "variable_details": [
-    {
-      "variable_name": "LLT",
-      "variable_type": "localtrend",
-      "deterministic_transform": {
-        "functional_form": "linear",
-        "params": null
-      },
-      "normalization": "none",
-      "random_coeff_dims": [
-      ]
-    },
+    
     {
       "variable_name": "annual_seasonality",
       "variable_type": "season",
+      "coeff_prior":{
+        "coeff_dist": "Normal",
+        "coeff_params": {
+          "mu": 0.0,
+          "sigma": 0.1
+        }
+      },
+      "partial_pooling_sigma": 0,
       "random_coeff_dims": [
       ]
     },
@@ -55,7 +53,7 @@
       "mean": null,
       "time_transform": null,
       "sign": "positive",
-      "partial_pooling_sigma": 0.1,
+      "partial_pooling_sigma": 0,
       "adstock": "delayed",
       "media_transform": "hill",
       "coeff_prior": {
@@ -82,7 +80,7 @@
         "lag_min": 0.00001,
         "lag_max": 3.0
       }
-    },
+    },  
     {
       "variable_name": "Stock_Total_Total_Total",
       "variable_type": "exog",
@@ -109,7 +107,7 @@
         "Product"
       ],
       "likelihood": {
-        "type": "NegativeBinomial"
+        "type": "Poisson"
       }
     }
   ],
