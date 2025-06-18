@@ -110,12 +110,15 @@ class CoeffPrior(Prior):
                 )
 
                 return coeff_est
-
-            sigma = pm.HalfCauchy(f"{varname}_rand_coeff_sigma", pooling_sigma)
-            # random_coeff_mu = coeff_dist(f"{self.variable_name}_random_coeff_mu", **coeff_params)
-            random_fixed = pm.Normal(
-                f"{varname}_rand_coeff", 0, 1, dims=random_coeff_dims
-            )
+            if pooling_sigma == 0:
+                sigma = 0
+                random_fixed = 0
+            else:
+                sigma = pm.HalfNormal(f"{varname}_rand_coeff_sigma", pooling_sigma)
+                # random_coeff_mu = coeff_dist(f"{self.variable_name}_random_coeff_mu", **coeff_params)
+                random_fixed = pm.Normal(
+                    f"{varname}_rand_coeff", 0, 1, dims=random_coeff_dims
+                )
 
             expanded_random = pt.expand_dims(
                 random_fixed, axis=random_dims_project["axis"]
@@ -185,11 +188,11 @@ class HillPrior(Prior):
         n_std = self.n_std
         n_ratio = n_std / n_ave + 1
         with model:
-            K_ = pm.Normal(f"{var_name}_K_", np.log(K_ave), np.log(K_ratio))
-            n_ = pm.Normal(f"{var_name}_n_", np.log(n_ave), np.log(n_ratio))
+            K = pm.LogNormal(f"{var_name}_K", np.log(K_ave), np.log(K_ratio))
+            n_ = pm.Exponential(f"{var_name}_n_", 1 / (n_ave-1))
 
-            K = pm.Deterministic(f"{var_name}_K", pm.math.exp(K_))
-            n = pm.Deterministic(f"{var_name}_n", pm.math.exp(n_))
+            # K = pm.Deterministic(f"{var_name}_K", pm.math.exp(K_))
+            n = pm.Deterministic(f"{var_name}_n", n_ + 1)
         return K, n
 
 
@@ -219,10 +222,10 @@ class InterceptPrior(ControlCoeffPrior):
 
 class LocalTrendPrior(Prior):
     type: Literal["LocalTrend"] = "LocalTrend"
-    variability: Optional[PositiveFloat] = 2.0
-    group_variablility: Optional[PositiveFloat] = 1.0
-    partial_pooling: Optional[PositiveFloat] = 0.75
-    initial_dist_var: Optional[PositiveFloat] = 3.0
+    variability: Optional[PositiveFloat] = 0.2
+    group_variablility: Optional[PositiveFloat] = 0.01
+    partial_pooling: Optional[PositiveFloat] = 0.01
+    initial_dist_var: Optional[PositiveFloat] = 1.0
 
     def build(
         self,
@@ -265,7 +268,7 @@ class LocalTrendPrior(Prior):
         with model:
             with pm.Model(name=f"LLT_{var_name}", coords=coords):
                 if random_dims is None:
-                    tau = pm.HalfCauchy("tau", self.variability)
+                    tau = pm.HalfNormal("tau", self.variability)
                     trends_betas = pm.GaussianRandomWalk(
                         "splines_betas",
                         mu=0,

@@ -77,10 +77,10 @@ class BayesInsightModel(BaseModel):
         data = self.data
 
         coords = self.get_coords()
-        media_variables = self.return_media_variables()
-        control_variables = self.return_control_variables()
-        trend_variables = self.return_trend_variables()
-        season_variables = self.return_season_variables()
+        # media_variables = self.return_media_variables() # Removed
+        # control_variables = self.return_control_variables() # Removed
+        # trend_variables = self.return_trend_variables() # Removed
+        # season_variables = self.return_season_variables() # Removed
         exog_variables = self.return_exog_variables()
 
         assert len(exog_variables) == 1, "Only one exog variable is supported"
@@ -97,27 +97,17 @@ class BayesInsightModel(BaseModel):
             else:
                 contributions = pm.Deterministic(
                     "intercept_contribution",
-                    contributions[..., None] * shape_,
+                    contributions[..., None] * shape_, # Ensure broadcasting for intercept
                     dims=var_dim,
                 )
 
-            for var in media_variables:
-                contributions_ = var.get_contributions(data)
+            # Consolidated loop for all non-exog variable contributions
+            for var in self.variable_details:
+                if var.variable_type == "exog":
+                    continue  # Skip exog variable, it's handled separately
 
-                contributions = contributions + contributions_
-
-            for var in trend_variables:
-                contributions_ = var.get_contributions(data)
-
-                contributions = contributions + contributions_
-
-            for var in control_variables:
-                contributions_ = var.get_contributions(data)
-
-                contributions = contributions + contributions_
-
-            for var in season_variables:
-                contributions_ = var.get_contributions(data)
+                # Use the standardized get_contribution method from VariableDetails
+                contributions_ = var.get_contribution(data, model=model)
                 contributions = contributions + contributions_
 
             if (
@@ -157,7 +147,7 @@ class BayesInsightModel(BaseModel):
                 return var
         raise ValueError(f"{varname} not in variable details")
 
-    def return_media_variables(self) -> List[MediaVariableDetails]:
+    def return_media_variables(self) -> List[MediaVariableDetails]: # Removed
         media_vars = []
         for var in self.variable_details:
             if var.variable_type == "media":
@@ -171,21 +161,21 @@ class BayesInsightModel(BaseModel):
                 exog_vars.append(var)
         return exog_vars
 
-    def return_control_variables(self) -> List[ControlVariableDetails]:
+    def return_control_variables(self) -> List[ControlVariableDetails]: # Removed
         control_vars = []
         for var in self.variable_details:
             if var.variable_type == "control":
                 control_vars.append(var)
         return control_vars
 
-    def return_season_variables(self) -> List[SeasonVariableDetails]:
+    def return_season_variables(self) -> List[SeasonVariableDetails]: # Removed
         season_vars = []
         for var in self.variable_details:
             if var.variable_type == "season":
                 season_vars.append(var)
         return season_vars
 
-    def return_trend_variables(self) -> List[LocalTrendsVariableDetails]:
+    def return_trend_variables(self) -> List[LocalTrendsVariableDetails]: # Removed
         trend_vars = []
         for var in self.variable_details:
             if var.variable_type == "localtrend":

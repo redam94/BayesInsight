@@ -26,6 +26,7 @@ def requires_nu(likelihood: LikelihoodType):
 
 class Likelihood(BaseModel):
     type: LikelihoodType
+    likelihood_params: Optional[dict] = None
     dispersion_dims: Optional[List[str]] = None
 
     def build(self, varname, estimate, obs, model=None):
@@ -35,17 +36,24 @@ class Likelihood(BaseModel):
         var_dim = var_dims(model)
         with model:
             if requires_dispersion(self.type):
-                alpha = pm.Gamma(f"{varname}_alpha", 2, 1.0 / 1000)
+                if self.likelihood_params is None:
+                    alpha = pm.Gamma(f"{varname}_alpha", 2, 1.0 / 1000)
+                else:
+                    alpha = pm.Gamma(f"{varname}_alpha", **self.likelihood_params)
                 dispersion_params["alpha"] = alpha
             elif requires_prob(self.type):
-                psi = pm.Beta(
-                    f"{varname}_psi", alpha=1, beta=1, dims=self.dispersion_dims
-                )
+                if self.likelihood_params is None:
+                    psi = pm.Beta(f"{varname}_psi", alpha=1, beta=1)
+                else:
+                    psi = pm.Beta(f"{varname}_psi", **self.likelihood_params)
+                
                 dispersion_params["psi"] = psi
             elif requires_sd(self.type):
-                sigma = pm.Exponential(
-                    f"{varname}_sigma", lam=1, dims=self.dispersion_dims
-                )
+                if self.likelihood_params is None:
+                    sigma = pm.HalfNormal(f"{varname}_sigma", 1.0, dims=self.dispersion_dims)
+                else:
+                    sigma = pm.HalfNormal(f"{varname}_sigma", **self.likelihood_params, dims=self.dispersion_dims)
+                
                 dispersion_params["sigma"] = sigma
 
             lik = likelihood(
