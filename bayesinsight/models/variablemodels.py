@@ -326,10 +326,10 @@ class MediaVariableDetails(VariableDetails):
     def register_variable(self, data: MFF | np.ndarray, model=None):
         self.__group_nonzero_median = (
             self.as_xarray(data).where(lambda x: x > 0).median(dim="Period")
-        )
+        ).where(lambda x: x>0, 1)
         self.__group_nonzero_mean = (
             self.as_xarray(data).where(lambda x: x > 0).mean(dim="Period")
-        )
+        ).where(lambda x: x>0, 1)
         return super().register_variable(data, model=model)
 
     def build_coeff_prior(self, model=None):
